@@ -27,6 +27,8 @@ import { useTranslations } from "next-intl";
 import type { LocalMediaState, MediaParticipant } from "@/lib/media/types";
 import { cn } from "@/lib/utils";
 import { CameraOptionsMenu } from "./CameraOptionsMenu";
+import { VideoQualityMenu } from "./VideoQualityMenu";
+import type { VideoQualityPreset } from "@/lib/media/types";
 
 export type PanelKind = "participants" | "chat" | null;
 
@@ -92,6 +94,7 @@ export function MeetingControls({
   onSwitchCamera,
   onToggleMirror,
   onUnlockAudio,
+  onSetVideoQuality,
 }: {
   localParticipant: MediaParticipant;
   isHost: boolean;
@@ -109,6 +112,7 @@ export function MeetingControls({
   onSwitchCamera: () => void;
   onToggleMirror: () => void;
   onUnlockAudio: () => void;
+  onSetVideoQuality: (preset: VideoQualityPreset) => void;
 }) {
   const t = useTranslations("room");
   const { isMuted, isCameraOn, isScreenSharing } = localParticipant;
@@ -145,6 +149,11 @@ export function MeetingControls({
           onToggleMirror={onToggleMirror}
         />
       )}
+
+      <VideoQualityMenu
+        current={localMedia.videoQuality}
+        onChange={onSetVideoQuality}
+      />
 
       <ControlButton
         label={isScreenSharing ? t("stopSharing") : t("shareScreen")}

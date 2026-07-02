@@ -28,6 +28,7 @@ import { ParticipantsPanel } from "./ParticipantsPanel";
 import { RecordingBadge } from "./RecordingBadge";
 import { RemoteAudioTracks } from "./RemoteAudioTracks";
 import { AudioStatusBadge } from "./AudioStatusBadge";
+import { NetworkQualityBadge } from "./NetworkQualityBadge";
 import { VideoGrid } from "./VideoGrid";
 
 /**
@@ -178,6 +179,7 @@ export function MeetingRoom({
             audioPlaybackReady={room.audioPlaybackReady}
             participants={room.participants}
           />
+          <NetworkQualityBadge quality={room.connectionQuality} />
           <ConnectionBadge state={room.connection} />
         </div>
       </header>
@@ -268,6 +270,7 @@ export function MeetingRoom({
           onSwitchCamera={() => client.switchCamera()}
           onToggleMirror={() => client.setMirrorLocalCamera(!room.localMedia.mirrorCamera)}
           onUnlockAudio={() => client.unlockAudio()}
+          onSetVideoQuality={(preset) => client.setVideoQuality(preset)}
         />
       )}
     </main>

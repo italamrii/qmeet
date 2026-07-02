@@ -225,6 +225,35 @@ docker compose -f docker-compose.dev.yml up -d
 npx prisma migrate dev
 ```
 
+## Meeting quality & scale
+
+### Default video settings
+
+- **Camera capture:** 1280×720 @ 30 fps (with browser/device fallback)
+- **Room options:** `adaptiveStream: true`, `dynacast: true`
+- **Publish:** VP8 simulcast with layered encoding (720p / 540p / 360p depending on preset)
+- **Screen share:** 1080p @ 15 fps with `contentHint: detail` for readable text (never mirrored)
+- **Audio:** `AudioPresets.music` with echo cancellation — audio is not degraded when video quality drops
+
+In-meeting **Video quality** menu: Auto (default), High 720p, Medium 480p, Low 360p. Changing quality re-publishes the local camera track when the camera is on.
+
+### Recommended participant limits
+
+| Scenario | Guidance |
+|----------|----------|
+| Normal meeting | **2–20** participants with cameras and mics |
+| Large meeting | Prefer **fewer active cameras**; ask others to stay muted/video-off |
+| 50+ viewers | **Webinar mode** (planned) — one-way broadcast with limited publishers |
+
+LiveKit SFU scales subscribers well, but each active camera adds encode/decode CPU on clients and bandwidth on the SFU. `adaptiveStream` and `dynacast` reduce waste by pausing unused layers and adapting to tile size.
+
+### Limitations
+
+- Quality presets depend on device hardware and browser `getUserMedia` support — requested resolution may fall back automatically.
+- Connection quality badge reflects LiveKit's local participant estimate; it may take a few seconds after join to appear.
+- Screen share quality is capped by the OS/browser capture surface and network; very high-DPI displays may still compress text slightly.
+- Mock mode does not apply real capture settings (UI-only quality selector).
+
 ## Project status
 
 Following the staged execution plan:

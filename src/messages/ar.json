@@ -290,6 +290,11 @@
     "cameraOnAction": "تشغيل الكاميرا",
     "cameraOffAction": "إيقاف الكاميرا",
     "cameraOptions": "خيارات الكاميرا",
+    "videoQuality": "جودة الفيديو",
+    "qualityAuto": "تلقائي",
+    "qualityHigh": "عالية 720p",
+    "qualityMedium": "متوسطة 480p",
+    "qualityLow": "منخفضة 360p",
     "switchCamera": "قلب الكاميرا",
     "mirrorCamera": "عكس الكاميرا الأمامية",
     "switchCameraUnsupported": "تبديل الكاميرا غير مدعوم على هذا الجهاز",
@@ -327,6 +332,11 @@
     "audioStatus": {
       "connected": "الصوت متصل",
       "unavailable": "الصوت غير متصل"
+    },
+    "networkQuality": {
+      "excellent": "ممتاز",
+      "good": "جيد",
+      "poor": "ضعيف"
     }
   },
   "landingSupport": {

@@ -21,6 +21,12 @@ export type MediaRole = "HOST" | "CO_HOST" | "PARTICIPANT" | "GUEST";
 /** Connection lifecycle of the room session. */
 export type ConnectionState = "connecting" | "connected" | "reconnecting" | "disconnected";
 
+/** User-selected local camera publish quality. */
+export type VideoQualityPreset = "auto" | "high" | "medium" | "low";
+
+/** LiveKit-derived network quality for the local participant. */
+export type ConnectionQualityLevel = "excellent" | "good" | "poor";
+
 /** Attach/detach hook for a provider video track (LiveKit in production). */
 export interface VideoTrackAttachment {
   /** Stable id (track sid) so React effects do not thrash on snapshot rebuilds. */
@@ -78,6 +84,8 @@ export interface LocalMediaState {
   supportsCameraSwitch: boolean;
   /** Active camera facing when known. */
   cameraFacing: "user" | "environment" | "unknown";
+  /** Local camera publish quality preference. */
+  videoQuality: VideoQualityPreset;
 }
 
 /** Immutable snapshot of the whole room state, replaced on every change. */
@@ -95,6 +103,8 @@ export interface RoomSnapshot {
   localMedia: LocalMediaState;
   /** True when browser audio playback is unlocked (LiveKit startAudio succeeded). */
   audioPlaybackReady: boolean;
+  /** Local participant network quality (LiveKit); null until known. */
+  connectionQuality: ConnectionQualityLevel | null;
 }
 
 /** Options the UI provides when joining a room. */
@@ -134,6 +144,9 @@ export interface MediaRoomClient {
 
   /** Resume remote audio playback after a user gesture (browser autoplay policy). */
   unlockAudio(): void;
+
+  /** Change local camera publish quality (re-applies if camera is on). */
+  setVideoQuality(preset: VideoQualityPreset): void;
 
   // --- Host-only (UI-gated here; token-grant-enforced in Step 5) ---
   muteParticipant(participantId: string): void;

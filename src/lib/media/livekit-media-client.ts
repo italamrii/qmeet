@@ -20,6 +20,7 @@ import {
   Room,
   RoomEvent,
   Track,
+  ConnectionQuality as LKConnectionQuality,
   ConnectionState as LKConnectionState,
   type Participant,
   type RemoteParticipant,
@@ -28,11 +29,13 @@ import {
 } from "livekit-client";
 import type {
   ChatMessage,
+  ConnectionQualityLevel,
   ConnectionState,
   MediaParticipant,
   MediaRole,
   MediaRoomClient,
   RoomSnapshot,
+  VideoQualityPreset,
 } from "./types";
 import {
   getCameraVideoTrack,
@@ -50,6 +53,15 @@ import {
   writeMirrorPreference,
 } from "./mirror-preference";
 import type { LocalMediaState } from "./types";
+import {
+  buildLiveKitRoomOptions,
+  getCameraCaptureOptions,
+  getCameraPublishOptions,
+  getScreenShareCaptureOptions,
+  getScreenSharePublishOptions,
+  resolveVideoQualityPreference,
+  writeVideoQualityPreference,
+} from "./video-quality";
 
 /** Data-channel topic for in-room chat messages. */
 const CHAT_TOPIC = "qm-chat";
@@ -100,6 +112,21 @@ function roleFromMetadata(metadata: string | undefined, fallback: MediaRole): Me
   return fallback;
 }
 
+/** Maps LiveKit connection quality to UI labels (excellent / good / poor). */
+function mapConnectionQuality(quality: LKConnectionQuality): ConnectionQualityLevel | null {
+  switch (quality) {
+    case LKConnectionQuality.Excellent:
+      return "excellent";
+    case LKConnectionQuality.Good:
+      return "good";
+    case LKConnectionQuality.Poor:
+    case LKConnectionQuality.Lost:
+      return "poor";
+    default:
+      return null;
+  }
+}
+
 export class LiveKitMediaClient implements MediaRoomClient {
   private room: Room;
   private listeners = new Set<() => void>();
@@ -125,9 +152,11 @@ export class LiveKitMediaClient implements MediaRoomClient {
   private supportsCameraSwitch = false;
   private videoDeviceIndex = 0;
   private audioPlaybackReady = false;
+  private videoQuality: VideoQualityPreset = resolveVideoQualityPreference();
+  private connectionQuality: ConnectionQualityLevel | null = null;
 
   constructor(private readonly options: LiveKitClientOptions) {
-    this.room = new Room({ adaptiveStream: true, dynacast: true });
+    this.room = new Room(buildLiveKitRoomOptions());
     this.mirrorCamera = resolveMirrorPreference("user");
     this.snapshot = {
       connection: "connecting",
@@ -141,8 +170,10 @@ export class LiveKitMediaClient implements MediaRoomClient {
         mirrorCamera: this.mirrorCamera,
         supportsCameraSwitch: isMobileDevice(),
         cameraFacing: "unknown",
+        videoQuality: this.videoQuality,
       },
       audioPlaybackReady: false,
+      connectionQuality: null,
     };
   }
 
@@ -166,13 +197,13 @@ export class LiveKitMediaClient implements MediaRoomClient {
     try {
       await this.room.connect(this.options.url, this.options.token);
       this.startedAt = new Date().toISOString();
+      this.connectionQuality = mapConnectionQuality(this.room.localParticipant.connectionQuality);
       // Devices are enabled only now — AFTER the user clicked Join.
       if (this.options.initialMicOn) {
         await this.room.localParticipant.setMicrophoneEnabled(true).catch(() => undefined);
       }
       if (this.options.initialCameraOn) {
-        await this.room.localParticipant.setCameraEnabled(true, { facingMode: "user" }).catch(() => undefined);
-        this.cameraFacing = "user";
+        await this.enableCameraWithQuality("user");
         await this.refreshDeviceCapabilities();
       }
       await this.ensureAudioPlayback();
@@ -205,8 +236,7 @@ export class LiveKitMediaClient implements MediaRoomClient {
       await this.room.localParticipant.setCameraEnabled(false).catch(() => undefined);
     } else {
       const facing = this.cameraFacing === "unknown" ? "user" : this.cameraFacing;
-      await this.room.localParticipant.setCameraEnabled(true, { facingMode: facing }).catch(() => undefined);
-      this.cameraFacing = facing;
+      await this.enableCameraWithQuality(facing);
       await this.refreshDeviceCapabilities();
     }
     this.rebuild();
@@ -224,6 +254,35 @@ export class LiveKitMediaClient implements MediaRoomClient {
 
   unlockAudio(): void {
     void this.ensureAudioPlayback().then(() => this.rebuild());
+  }
+
+  setVideoQuality(preset: VideoQualityPreset): void {
+    void this.applyVideoQuality(preset);
+  }
+
+  private async enableCameraWithQuality(
+    facing: "user" | "environment" | "unknown"
+  ): Promise<void> {
+    const capture = getCameraCaptureOptions(this.videoQuality, facing);
+    const publish = getCameraPublishOptions(this.videoQuality);
+    await this.room.localParticipant.setCameraEnabled(true, capture, publish).catch(() => undefined);
+    if (facing !== "unknown") {
+      this.cameraFacing = facing;
+    }
+    lkDevLog("camera enabled", { quality: this.videoQuality, facing });
+  }
+
+  private async applyVideoQuality(preset: VideoQualityPreset): Promise<void> {
+    this.videoQuality = preset;
+    writeVideoQualityPreference(preset);
+    const cameraOn = this.room.localParticipant.isCameraEnabled;
+    if (cameraOn) {
+      const facing = this.cameraFacing === "unknown" ? "user" : this.cameraFacing;
+      await this.room.localParticipant.setCameraEnabled(false).catch(() => undefined);
+      await this.enableCameraWithQuality(facing);
+    }
+    lkDevLog("video quality changed", { preset });
+    this.rebuild();
   }
 
   private async doSwitchCamera(): Promise<void> {
@@ -245,8 +304,7 @@ export class LiveKitMediaClient implements MediaRoomClient {
         }
       } else if (this.room.localParticipant.isCameraEnabled) {
         const nextFacing = this.cameraFacing === "user" ? "environment" : "user";
-        await this.room.localParticipant.setCameraEnabled(true, { facingMode: nextFacing });
-        this.cameraFacing = nextFacing;
+        await this.enableCameraWithQuality(nextFacing);
       } else {
         this.cameraFacing = this.cameraFacing === "user" ? "environment" : "user";
       }
@@ -272,8 +330,19 @@ export class LiveKitMediaClient implements MediaRoomClient {
 
   async toggleScreenShare(): Promise<void> {
     const enabled = this.room.localParticipant.isScreenShareEnabled;
-    await this.room.localParticipant.setScreenShareEnabled(!enabled).catch(() => undefined);
-    lkDevLog(enabled ? "screen share stopped" : "screen share published");
+    if (enabled) {
+      await this.room.localParticipant.setScreenShareEnabled(false).catch(() => undefined);
+      lkDevLog("screen share stopped");
+    } else {
+      await this.room.localParticipant
+        .setScreenShareEnabled(
+          true,
+          getScreenShareCaptureOptions(),
+          getScreenSharePublishOptions()
+        )
+        .catch(() => undefined);
+      lkDevLog("screen share published");
+    }
     this.rebuild();
   }
 
@@ -346,6 +415,13 @@ export class LiveKitMediaClient implements MediaRoomClient {
     const rebuild = () => this.rebuild();
     this.room
       .on(RoomEvent.ConnectionStateChanged, rebuild)
+      .on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
+        if (participant.isLocal) {
+          this.connectionQuality = mapConnectionQuality(quality);
+          lkDevLog("connection quality", { level: this.connectionQuality });
+          rebuild();
+        }
+      })
       .on(RoomEvent.ParticipantConnected, (participant) => {
         lkDevLog("participant connected", { identity: participant.identity });
         rebuild();
@@ -483,8 +559,10 @@ export class LiveKitMediaClient implements MediaRoomClient {
         mirrorCamera: this.mirrorCamera,
         supportsCameraSwitch: this.supportsCameraSwitch,
         cameraFacing: this.cameraFacing,
+        videoQuality: this.videoQuality,
       },
       audioPlaybackReady: this.audioPlaybackReady,
+      connectionQuality: this.connectionQuality,
     };
     this.listeners.forEach((listener) => listener());
   }

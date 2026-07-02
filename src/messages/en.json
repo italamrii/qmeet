@@ -290,6 +290,11 @@
     "cameraOnAction": "Turn camera on",
     "cameraOffAction": "Turn camera off",
     "cameraOptions": "Camera options",
+    "videoQuality": "Video quality",
+    "qualityAuto": "Auto",
+    "qualityHigh": "High 720p",
+    "qualityMedium": "Medium 480p",
+    "qualityLow": "Low 360p",
     "switchCamera": "Switch camera",
     "mirrorCamera": "Mirror front camera",
     "switchCameraUnsupported": "Camera switching is not supported on this device",
@@ -327,6 +332,11 @@
     "audioStatus": {
       "connected": "Audio connected",
       "unavailable": "Audio unavailable"
+    },
+    "networkQuality": {
+      "excellent": "Excellent",
+      "good": "Good",
+      "poor": "Poor"
     }
   },
   "landingSupport": {

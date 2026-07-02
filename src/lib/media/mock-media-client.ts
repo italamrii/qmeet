@@ -17,6 +17,7 @@ import type {
   MediaParticipant,
   MediaRoomClient,
   RoomSnapshot,
+  VideoQualityPreset,
 } from "./types";
 import { isMobileDevice } from "./device-utils";
 import {
@@ -81,6 +82,7 @@ export class MockMediaClient implements MediaRoomClient {
   private connected = false;
   private cameraFacing: LocalMediaState["cameraFacing"] = "user";
   private mirrorCamera = resolveMirrorPreference("user");
+  private videoQuality: VideoQualityPreset = "auto";
 
   constructor(private readonly options: JoinOptions) {
     const local: MediaParticipant = {
@@ -118,8 +120,10 @@ export class MockMediaClient implements MediaRoomClient {
         mirrorCamera: this.mirrorCamera,
         supportsCameraSwitch: isMobileDevice(),
         cameraFacing: this.cameraFacing,
+        videoQuality: this.videoQuality,
       },
       audioPlaybackReady: false,
+      connectionQuality: null,
     };
   }
 
@@ -138,7 +142,11 @@ export class MockMediaClient implements MediaRoomClient {
 
     // Simulated signaling handshake.
     this.after(1200, () => {
-      this.patch({ connection: "connected", startedAt: new Date().toISOString() });
+      this.patch({
+        connection: "connected",
+        startedAt: new Date().toISOString(),
+        connectionQuality: "good",
+      });
       this.startSpeakingSimulation();
     });
 
@@ -221,6 +229,13 @@ export class MockMediaClient implements MediaRoomClient {
 
   unlockAudio(): void {
     /* no-op in mock mode */
+  }
+
+  setVideoQuality(preset: VideoQualityPreset): void {
+    this.videoQuality = preset;
+    this.patch({
+      localMedia: { ...this.snapshot.localMedia, videoQuality: preset },
+    });
   }
 
   toggleScreenShare(): void {
