@@ -32,7 +32,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!parsed.success) {
     return jsonError(400, "Invalid signup data.");
   }
-  const { email, name, password } = parsed.data;
+  const { email, name, password, companyName, plan, preferredLocale: _locale } = parsed.data;
 
   const limit = consumeAuthRateLimit("signup", getClientIp(request), email);
   if (!limit.allowed) {
@@ -41,13 +41,32 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
   if (existing) {
-    // Generic message — do not confirm which emails are registered.
     return jsonError(409, "Account could not be created.");
   }
 
-  const user = await prisma.user.create({
-    data: { email, name, passwordHash: await hashPassword(password) },
-    select: { id: true, email: true, name: true, role: true, tokenVersion: true },
+  const { uniqueOrgSlug } = await import("@/lib/org/slug");
+  const billingStatus = plan === "BUSINESS" ? "PENDING_CONTACT" : "ACTIVE";
+
+  const user = await prisma.$transaction(async (tx) => {
+    const created = await tx.user.create({
+      data: { email, name, passwordHash: await hashPassword(password) },
+      select: { id: true, email: true, name: true, role: true, tokenVersion: true },
+    });
+
+    const org = await tx.organization.create({
+      data: {
+        name: companyName,
+        slug: uniqueOrgSlug(companyName),
+        plan,
+        billingStatus,
+      },
+    });
+
+    await tx.organizationMember.create({
+      data: { userId: created.id, organizationId: org.id, role: "OWNER" },
+    });
+
+    return created;
   });
 
   const refresh = await issueRefreshToken(
@@ -64,6 +83,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   setRefreshCookie(refresh.token, refresh.expiresAt);
 
   await logAudit("USER_SIGNUP", user.id);
+  await logAudit("ORG_CREATED", user.id);
 
   return NextResponse.json(
     { user: { id: user.id, email: user.email, name: user.name, role: user.role } },

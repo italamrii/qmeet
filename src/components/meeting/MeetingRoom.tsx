@@ -5,19 +5,20 @@
  * recording), adaptive video grid, side panels (participants/chat), and the
  * control bar. Panels render inline on desktop and as a bottom drawer on
  * mobile. Depends ONLY on the media interfaces (lib/media) — never on LiveKit.
- * Depends on: use-mock-room hook, all meeting components, framer-motion.
- * Security notes: role comes in as a prop for the mock; Step 5 derives it
- * server-side from the session/invite and the LiveKit token grants.
+ * Depends on: use-media-room hook, all meeting components, framer-motion.
+ * Security notes: the LOCAL role is derived from the connected client's local
+ * participant (authoritative in LiveKit mode, where the server sets it in the
+ * token). The `role` prop is only a fallback for mock mode.
  */
 "use client";
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
-import { useMockRoom } from "@/lib/media/use-mock-room";
-import type { MediaRole } from "@/lib/media/types";
+import { useMediaRoom } from "@/lib/media/use-media-room";
+import type { MediaProvider, MediaRole } from "@/lib/media/types";
 import { cn } from "@/lib/utils";
 import { ChatPanel } from "./ChatPanel";
 import { ConnectionBadge } from "./ConnectionBadge";
@@ -29,19 +30,24 @@ import { VideoGrid } from "./VideoGrid";
 
 /**
  * The meeting room shell.
+ * @param provider - Server-resolved media provider ("mock" | "livekit").
  * @param roomId - Room identifier from the URL.
  * @param displayName - Local user's display name.
- * @param role - Local user's media role (mock; server-derived in Step 5).
+ * @param role - Fallback media role (mock mode; LiveKit uses server-set role).
  * @param initialMicOn / initialCameraOn - Device choices from the join page.
  */
 export function MeetingRoom({
+  provider,
   roomId,
+  roomTitle,
   displayName,
   role,
   initialMicOn,
   initialCameraOn,
 }: {
+  provider: MediaProvider;
   roomId: string;
+  roomTitle: string;
   displayName: string;
   role: MediaRole;
   initialMicOn: boolean;
@@ -50,7 +56,8 @@ export function MeetingRoom({
   const t = useTranslations("room");
   const tBrand = useTranslations("common");
   const router = useRouter();
-  const { room, client } = useMockRoom({
+  const { room, client, phase, error } = useMediaRoom({
+    provider,
     roomId,
     displayName,
     role,
@@ -59,15 +66,63 @@ export function MeetingRoom({
   });
   const [openPanel, setOpenPanel] = useState<PanelKind>(null);
 
-  const localParticipant = room.participants.find((p) => p.isLocal);
-  const isHost = role === "HOST" || role === "CO_HOST";
-
   function togglePanel(panel: Exclude<PanelKind, null>) {
     setOpenPanel((current) => (current === panel ? null : panel));
   }
 
+  // --- Error state (LiveKit token/connect failure) --------------------------
+  if (phase === "error") {
+    return (
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 px-6">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="card-sheen flex flex-col items-center gap-4 rounded-xl border bg-card/60 px-10 py-12 text-center backdrop-blur-sm"
+        >
+          <h1 className="text-2xl font-semibold tracking-header">{t("connectionFailed")}</h1>
+          <p className="max-w-sm text-sm text-muted-foreground">{t("connectionFailedHint")}</p>
+          {error && (
+            <p className="max-w-sm truncate text-xs text-muted-foreground/60" dir="ltr">
+              {error}
+            </p>
+          )}
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground"
+            >
+              {t("retry")}
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/")}
+              className="rounded-full border border-border/70 px-6 py-2.5 text-sm text-foreground/85 transition-colors hover:bg-secondary"
+            >
+              {t("backHome")}
+            </button>
+          </div>
+        </motion.div>
+      </main>
+    );
+  }
+
+  // --- Connecting state (client not ready yet) ------------------------------
+  if (!room || !client) {
+    return (
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 px-6">
+        <Loader2 aria-hidden className="h-7 w-7 animate-spin text-glow" />
+        <p className="text-sm text-muted-foreground">{t("connection.connecting")}</p>
+      </main>
+    );
+  }
+
+  const localParticipant = room.participants.find((p) => p.isLocal);
+  const effectiveRole: MediaRole = localParticipant?.role ?? role;
+  const isHost = effectiveRole === "HOST" || effectiveRole === "CO_HOST";
+
   function leave() {
-    client.disconnect();
+    client?.disconnect();
     router.push("/");
   }
 
@@ -111,7 +166,7 @@ export function MeetingRoom({
         </span>
         <span aria-hidden className="hidden h-5 w-px bg-border/70 sm:block" />
         <h1 className="min-w-0 truncate text-sm font-semibold text-foreground">
-          {t("mockTitle")}
+          {roomTitle}
         </h1>
         <div className="ms-auto flex items-center gap-2">
           {room.isRecording && <RecordingBadge />}

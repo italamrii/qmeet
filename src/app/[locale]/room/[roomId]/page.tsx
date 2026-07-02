@@ -3,15 +3,16 @@
  * ---------------------------------------
  * Purpose: The meeting room route (/ar/room/[roomId], /en/room/[roomId]).
  * Reads join preferences from the query string and mounts the MeetingRoom
- * shell on the mock media layer.
- * Depends on: MeetingRoom, next-intl.
- * Security notes: the local role is mocked here (HOST by default so host
- * controls are reviewable; `?guest=1` previews the participant view). In
- * Step 5 the role is derived SERVER-SIDE from the session or verified invite
- * and enforced through LiveKit token grants — never from a query param.
+ * shell on the resolved media provider (mock or LiveKit).
+ * Depends on: MeetingRoom, resolveMediaProvider, next-intl.
+ * Security notes: in LiveKit mode the authoritative role is set SERVER-SIDE in
+ * the token (via /api/livekit/token) and reflected by the connected client —
+ * the `role` prop here is only a mock-mode fallback (HOST default; `?guest=1`
+ * previews the participant view), never a security boundary.
  */
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { MeetingRoom } from "@/components/meeting/MeetingRoom";
+import { getMediaProvider, resolveMediaProvider } from "@/lib/media/provider";
 import type { MediaRole } from "@/lib/media/types";
 
 /**
@@ -33,14 +34,28 @@ export default async function RoomPage({
 
   const displayName = searchParams.name?.trim().slice(0, 100) || t("guestFallback");
   const role: MediaRole = searchParams.guest === "1" ? "GUEST" : "HOST";
+  const { provider, configurationError } = resolveMediaProvider();
+
+  if (configurationError) {
+    return (
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 px-6">
+        <div className="card-sheen max-w-md rounded-xl border bg-card/60 px-8 py-10 text-center backdrop-blur-sm">
+          <h1 className="text-xl font-semibold tracking-header">{t("configErrorTitle")}</h1>
+          <p className="mt-3 text-sm text-muted-foreground">{t("configErrorHint")}</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <MeetingRoom
+      provider={provider}
       roomId={roomId}
+      roomTitle={roomId}
       displayName={displayName}
       role={role}
-      initialMicOn={searchParams.mic !== "0"}
-      initialCameraOn={searchParams.cam !== "0"}
+      initialMicOn={searchParams.mic === "1"}
+      initialCameraOn={searchParams.cam === "1"}
     />
   );
 }

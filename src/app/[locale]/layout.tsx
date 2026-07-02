@@ -30,8 +30,9 @@ const plexArabic = IBM_Plex_Sans_Arabic({
 });
 
 export const metadata: Metadata = {
-  title: "Q Meet",
-  description: "A premium video meeting experience for modern teams.",
+  title: "Q Meet | كيو",
+  description:
+    "Secure Saudi-built video meetings for modern teams and organizations. منصة اجتماعات مرئية آمنة للشركات العربية.",
 };
 
 /**

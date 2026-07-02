@@ -11,11 +11,17 @@
  */
 import { z } from "zod";
 
+const subscriptionPlan = z.enum(["FREE", "TEAM", "BUSINESS"]).default("FREE");
+const preferredLocale = z.enum(["ar", "en"]).default("ar");
+
 /** POST /api/auth/signup body. */
 export const signupSchema = z.object({
   email: z.string().trim().toLowerCase().email().max(254),
   name: z.string().trim().min(1).max(100),
   password: z.string().min(12).max(128),
+  companyName: z.string().trim().min(1).max(150),
+  plan: subscriptionPlan,
+  preferredLocale,
 });
 export type SignupInput = z.infer<typeof signupSchema>;
 

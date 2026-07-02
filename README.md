@@ -23,6 +23,32 @@ npm run dev
 
 Open http://localhost:3000 — you will be redirected to the Arabic (default) locale.
 
+## Running mock vs LiveKit mode
+
+The meeting media layer has two interchangeable backends behind one interface.
+
+**Mock mode (default, zero setup, permission-free):**
+
+```bash
+MEDIA_PROVIDER=mock   # or leave LIVEKIT_* blank
+npm run dev
+```
+
+No camera/microphone is ever accessed; the room is populated with simulated participants and chat. Great for UI review.
+
+**LiveKit mode (real media):**
+
+```bash
+MEDIA_PROVIDER=livekit
+LIVEKIT_URL=wss://your-livekit-host          # or wss://<project>.livekit.cloud
+LIVEKIT_API_KEY=...
+LIVEKIT_API_SECRET=...
+INVITE_LINK_SECRET=...   # required for guest invite links
+npm run dev
+```
+
+If `MEDIA_PROVIDER=livekit` but any `LIVEKIT_*` value is missing, the app **falls back to mock** automatically (never crashes). Camera/mic are only requested after the user clicks **Join** (or the optional **Test camera & mic** button on the join page). Access tokens are minted server-side only at `POST /api/livekit/token`; the API secret never reaches the browser.
+
 ## Security Setup
 
 Read `SECURITY.md` before deploying. Non-negotiables:
@@ -48,6 +74,6 @@ Following the staged execution plan:
 - [x] **Step 1** — Scaffold
 - [x] **Step 2** — Prisma schema (approved with RefreshToken + retention additions)
 - [x] **Step 3** — Auth (argon2id, JWT + family-scoped refresh rotation, rate limiting)
-- [x] **Step 4** — Join/room UI (mock media) ← awaiting design approval
-- [ ] **Step 5** — Live LiveKit wiring (credentials required)
-- [ ] **Step 6** — Recording, dashboard, audit log
+- [x] **Step 4** — Join/room UI (mock media)
+- [x] **Step 5** — Live LiveKit wiring (provider switch, server-minted tokens, data-channel chat)
+- [ ] **Step 6** — Recording (Egress), server-side host moderation, dashboard, audit log view

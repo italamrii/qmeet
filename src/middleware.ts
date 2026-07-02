@@ -6,18 +6,38 @@
  *   2. Security headers on every response (CSP, HSTS, frame/content-type protections).
  * Depends on: next-intl/middleware, src/i18n/routing.ts.
  * Security notes:
- *   - CSP: `connect-src` includes wss:/https: because the LiveKit client opens a
- *     secure WebSocket to the self-hosted SFU. Once LIVEKIT_URL is known, tighten
- *     this to the exact origin (see SECURITY.md §Headers).
+ *   - CSP: `connect-src` is pinned to 'self' plus the exact configured
+ *     LIVEKIT_URL origin (wss + https), NOT broad `wss:`/`https:` wildcards.
+ *     In mock mode (no LIVEKIT_URL) it is 'self' only.
  *   - `media-src blob:` is required for local camera/mic preview streams.
  *   - HSTS assumes TLS-only deployment (no plaintext fallback) — see deployment notes.
- *   - Auth-endpoint rate limiting will be added in Step 3 (documented in SECURITY.md).
  */
 import createIntlMiddleware from "next-intl/middleware";
 import type { NextRequest } from "next/server";
 import { routing } from "./i18n/routing";
 
 const intlMiddleware = createIntlMiddleware(routing);
+
+/**
+ * Builds the `connect-src` directive: 'self' plus the exact LiveKit origin
+ * (both wss and https forms) when LIVEKIT_URL is configured. No wildcards.
+ * @returns Space-separated source list. No side effects.
+ */
+function buildConnectSrc(): string {
+  const sources = ["'self'"];
+  const url = process.env.LIVEKIT_URL;
+  if (url) {
+    try {
+      const parsed = new URL(url);
+      const secure = parsed.protocol === "wss:" || parsed.protocol === "https:";
+      sources.push(`${secure ? "wss" : "ws"}://${parsed.host}`);
+      sources.push(`${secure ? "https" : "http"}://${parsed.host}`);
+    } catch {
+      /* malformed LIVEKIT_URL → keep 'self' only */
+    }
+  }
+  return sources.join(" ");
+}
 
 /**
  * Content-Security-Policy for the app.
@@ -30,9 +50,9 @@ const CSP = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' blob: data:",
   "font-src 'self' data:",
-  // wss: for LiveKit SFU signaling; https: for TURN/egress endpoints.
-  // TODO(step 5): replace with the exact LIVEKIT_URL origin.
-  "connect-src 'self' wss: https:",
+  // 'self' + the exact configured LiveKit origin (wss for SFU signaling,
+  // https for region/TURN HTTP). Additional TURN hosts, if any, go here too.
+  `connect-src ${buildConnectSrc()}`,
   "media-src 'self' blob:",
   "worker-src 'self' blob:",
   "frame-ancestors 'none'",

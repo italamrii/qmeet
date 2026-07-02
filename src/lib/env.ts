@@ -1,10 +1,9 @@
 /**
  * src/lib/env.ts
  * --------------
- * Purpose: Server-side environment variable access with fail-fast validation.
+ * Purpose: Server-side environment variable access and app-environment helpers.
  * Depends on: process.env (documented in .env.example).
  * Security notes: server-only module — never import from client components.
- * Secrets are read lazily so `next build` succeeds without a populated .env.
  */
 import "server-only";
 
@@ -22,5 +21,18 @@ export function requireEnv(name: string): string {
   return value;
 }
 
-/** True when running in production mode (drives cookie `secure` flag, etc.). */
+/** True when NODE_ENV is production (drives cookie `secure` flag, etc.). */
 export const isProduction = process.env.NODE_ENV === "production";
+
+/** Application environment: development | production (APP_ENV). */
+export function getAppEnv(): "development" | "production" {
+  return process.env.APP_ENV === "production" ? "production" : "development";
+}
+
+/** True when mock media is explicitly allowed (dev default, prod only via flag). */
+export function isMockMediaEnabled(): boolean {
+  if (getAppEnv() === "development") {
+    return process.env.ENABLE_MOCK_MEDIA !== "false";
+  }
+  return process.env.ENABLE_MOCK_MEDIA === "true";
+}

@@ -1,52 +1,81 @@
 /**
  * src/components/meeting/JoinCard.tsx
  * -----------------------------------
- * Purpose: Pre-join card — branding, room title, display-name (+ optional
- * guest email), camera/mic preference toggles, mock camera preview, and the
- * join action. Handles the invalid/expired invite state.
- * Depends on: DeviceToggle, ParticipantAvatar, i18n navigation, framer-motion.
+ * Purpose: Pre-join card — branding, room title, display-name (+ optional guest
+ * email), camera/mic preference toggles, an optional real device preview
+ * (LiveKit mode only), and the join action. Handles the invalid/expired invite
+ * state and the guest-grant exchange.
+ * Depends on: DeviceToggle, ParticipantAvatar, useDevicePreview, i18n nav.
  * Security notes:
- *   - Session probe via GET /api/auth/me (httpOnly cookie) — nothing touches
- *     localStorage, and the raw invite token is never rendered.
- *   - Device permissions note shown to the user; real getUserMedia in Step 5.
+ *   - Session probe via GET /api/auth/me (httpOnly cookie); nothing session-
+ *     related touches localStorage.
+ *   - The raw invite token is never rendered; for a guest it is POSTed once to
+ *     /api/livekit/guest, which sets an httpOnly grant cookie — so it does not
+ *     travel onward in the room URL.
+ *   - Real camera/mic are only accessed on an explicit click (Test button) or
+ *     after Join. Mock mode is fully permission-free.
  */
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { Mic, MicOff, Video, VideoOff, ShieldCheck, LinkIcon, ArrowLeft, Info } from "lucide-react";
+import {
+  Mic,
+  MicOff,
+  Video,
+  VideoOff,
+  ShieldCheck,
+  LinkIcon,
+  ArrowLeft,
+  Camera,
+  Loader2,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
+import type { MediaProvider } from "@/lib/media/types";
+import { useDevicePreview } from "@/lib/media/use-device-preview";
 import { DeviceToggle } from "./DeviceToggle";
 import { ParticipantAvatar } from "./ParticipantAvatar";
 
-/** Invite verdict computed server-side by the page (raw token never passed down). */
+/** Invite verdict computed server-side by the page (raw token never rendered). */
 export type InviteStatus = "member" | "guest" | "invalid";
 
 /**
  * The join page card.
  * @param roomId - Room identifier from the URL.
- * @param inviteStatus - "guest" (valid invite), "member" (no invite — account
- *   join), or "invalid" (expired/forged invite → error state).
+ * @param inviteStatus - "guest" (valid invite), "member" (account join), or
+ *   "invalid" (expired/forged → error state).
+ * @param provider - Active media provider ("mock" | "livekit").
+ * @param inviteToken - Raw invite token, present only for a valid guest; used
+ *   solely to exchange for a guest-grant cookie on join.
  */
 export function JoinCard({
   roomId,
   inviteStatus,
+  provider,
+  inviteToken,
 }: {
   roomId: string;
   inviteStatus: InviteStatus;
+  provider: MediaProvider;
+  inviteToken?: string;
 }) {
   const t = useTranslations("join");
   const tBrand = useTranslations("common");
   const router = useRouter();
+  const preview = useDevicePreview();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [cameraOn, setCameraOn] = useState(true);
-  const [micOn, setMicOn] = useState(true);
+  const [cameraOn, setCameraOn] = useState(false);
+  const [micOn, setMicOn] = useState(false);
   const [nameError, setNameError] = useState(false);
   const [sessionName, setSessionName] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+
+  const isLiveKit = provider === "livekit";
 
   // Best-effort session probe: prefill the display name for signed-in members.
   useEffect(() => {
@@ -94,21 +123,50 @@ export function JoinCard({
   // ---- Normal join flow -----------------------------------------------------
   const isGuest = inviteStatus === "guest" && !sessionName;
 
-  function handleJoin(event: FormEvent) {
+  async function handleJoin(event: FormEvent) {
     event.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) {
       setNameError(true);
       return;
     }
-    const params = new URLSearchParams({
-      name: trimmed,
-      cam: cameraOn ? "1" : "0",
-      mic: micOn ? "1" : "0",
-    });
-    if (isGuest) params.set("guest", "1");
-    router.push(`/room/${roomId}?${params.toString()}`);
+    setJoinError(null);
+    setJoining(true);
+
+    // Release any local preview device before entering the room (the room
+    // re-acquires devices itself based on the toggles below).
+    preview.stop();
+
+    try {
+      // Guest + LiveKit: exchange the invite for an httpOnly grant cookie so
+      // the raw token does not travel in the room URL.
+      if (isLiveKit && isGuest && inviteToken) {
+        const res = await fetch("/api/livekit/guest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roomId, invite: inviteToken, displayName: trimmed }),
+        });
+        if (!res.ok) {
+          setJoining(false);
+          setJoinError(t("joinFailed"));
+          return;
+        }
+      }
+
+      const params = new URLSearchParams({
+        name: trimmed,
+        cam: cameraOn ? "1" : "0",
+        mic: micOn ? "1" : "0",
+      });
+      if (isGuest) params.set("guest", "1");
+      router.push(`/room/${roomId}?${params.toString()}`);
+    } catch {
+      setJoining(false);
+      setJoinError(t("joinFailed"));
+    }
   }
+
+  const showRealPreview = isLiveKit && preview.status === "active";
 
   return (
     <motion.div
@@ -120,7 +178,21 @@ export function JoinCard({
       {/* ---- Preview column ---- */}
       <div className="flex flex-col gap-3">
         <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-border/60 bg-tile-sheen">
-          {cameraOn ? (
+          {showRealPreview ? (
+            <>
+              <video
+                ref={preview.videoRef}
+                autoPlay
+                muted
+                playsInline
+                className="h-full w-full object-cover"
+              />
+              <span className="absolute start-2 top-2 flex items-center gap-1.5 rounded-full bg-black/55 px-2 py-1 text-[10px] text-white backdrop-blur-sm">
+                <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-glow animate-pulse-live" />
+                {t("previewLive")}
+              </span>
+            </>
+          ) : cameraOn ? (
             <div className="flex h-full flex-col items-center justify-center gap-3">
               <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_50%_35%,hsl(var(--glow)/0.08),transparent)]" />
               <ParticipantAvatar id={`preview-${roomId}`} name={name || "؟"} className="h-20 w-20 text-2xl" />
@@ -134,14 +206,38 @@ export function JoinCard({
           )}
         </div>
 
-        {/* Demo-preview disclaimer: no real camera/mic is activated in this step. */}
-        <p
-          role="note"
-          className="flex items-start gap-2 rounded-lg border border-glow/20 bg-glow-faint px-3 py-2.5 text-xs leading-relaxed text-accent-foreground"
-        >
-          <Info aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 text-glow" />
-          {t("demoNote")}
-        </p>
+        {/* Real device preview control — LiveKit mode only, permission on click */}
+        {isLiveKit && (
+          <div className="flex flex-col gap-1.5">
+            {preview.status === "active" ? (
+              <button
+                type="button"
+                onClick={preview.stop}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-border/70 px-3 py-2 text-xs text-foreground/85 transition-colors hover:bg-secondary"
+              >
+                <VideoOff aria-hidden className="h-3.5 w-3.5" />
+                {t("stopTest")}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={preview.start}
+                disabled={preview.status === "requesting"}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-glow/30 bg-glow-faint px-3 py-2 text-xs text-accent-foreground transition-colors hover:bg-glow/15 disabled:opacity-60"
+              >
+                {preview.status === "requesting" ? (
+                  <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Camera aria-hidden className="h-3.5 w-3.5" />
+                )}
+                {t("testDevices")}
+              </button>
+            )}
+            {preview.status === "denied" && (
+              <p className="text-xs text-red-400">{t("permissionDenied")}</p>
+            )}
+          </div>
+        )}
 
         {/* Browser-permissions security note */}
         <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground/80">
@@ -158,7 +254,7 @@ export function JoinCard({
           </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-header">{t("title")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {t("roomLabel")}: {t("mockRoomTitle")}
+            {t("roomLabel")}: {roomId}
           </p>
         </div>
 
@@ -170,11 +266,7 @@ export function JoinCard({
           )}
         >
           <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-glow" />
-          {sessionName
-            ? t("joinAsMemberNote", { name: sessionName })
-            : isGuest
-              ? t("joinAsGuestNote")
-              : t("joinAsGuestNote")}
+          {sessionName ? t("joinAsMemberNote", { name: sessionName }) : t("joinAsGuestNote")}
         </span>
 
         <label className="flex flex-col gap-1.5">
@@ -230,10 +322,14 @@ export function JoinCard({
           />
         </div>
 
+        {joinError && <p className="text-xs text-red-400">{joinError}</p>}
+
         <button
           type="submit"
-          className="mt-1 h-12 rounded-full bg-primary text-sm font-semibold text-primary-foreground shadow-glow-sm transition-all hover:shadow-glow"
+          disabled={joining}
+          className="mt-1 flex h-12 items-center justify-center gap-2 rounded-full bg-primary text-sm font-semibold text-primary-foreground shadow-glow-sm transition-all hover:shadow-glow disabled:opacity-70"
         >
+          {joining && <Loader2 aria-hidden className="h-4 w-4 animate-spin" />}
           {t("joinNow")}
         </button>
       </form>

@@ -11,6 +11,9 @@
  * the client is never the authority.
  */
 
+/** Which media backend is active. Resolved server-side (see lib/media/provider). */
+export type MediaProvider = "mock" | "livekit";
+
 /** Role of a participant inside the media session (UI semantics).
  * Mapping to the DB `ParticipantRole` enum happens server-side in Step 5. */
 export type MediaRole = "HOST" | "CO_HOST" | "PARTICIPANT" | "GUEST";

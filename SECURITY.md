@@ -32,16 +32,27 @@ Each refresh token is persisted in the `RefreshToken` table with a `familyId` sh
 - Login returns an identical generic 401 for unknown-email and wrong-password; signup returns a generic 409 rather than "email already registered".
 - Unknown-email logins still execute one argon2 verification against a dummy hash so both branches cost roughly the same wall time.
 
-## LiveKit tokens — least privilege, short TTL
+## LiveKit tokens — least privilege, short TTL (implemented — Step 5)
 
-- Minted **server-side only** (`livekit-server-sdk` in a Route Handler). `LIVEKIT_API_SECRET` is never in the client bundle; nothing under `NEXT_PUBLIC_` relates to LiveKit credentials.
-- **Grant matrix by role** (enforced at mint time, not in the UI):
-  - `OBSERVER`: `canSubscribe` only — no publish, no data.
-  - `PARTICIPANT`: `canSubscribe`, `canPublish`, `canPublishData` (chat).
-  - `HOST`: participant grants + `roomAdmin` (mute-all, remove participant) + recording control.
-  - `ADMIN`: host grants + room service management.
-  A PARTICIPANT can never receive HOST-level token permissions because grants derive from the DB role, not from client input.
-- **TTL ≤ 4 hours**, re-minted on reconnect. No long-lived media tokens exist anywhere.
+- Minted **server-side only** at `POST /api/livekit/token` (`livekit-server-sdk` in `lib/media/livekit-server.ts`). `LIVEKIT_API_SECRET` is never in the client bundle; nothing under `NEXT_PUBLIC_` relates to LiveKit credentials. The client receives only `{ token, livekitUrl, identity, participantName, role }`.
+- **Role is resolved server-side, never trusted from the client:** an authenticated session maps its account role → media role; a guest's role comes from a verified invite grant. The Zod-validated request body's role (if any) is ignored.
+- **Grant matrix by role** (`grantForRole`, enforced at mint time):
+  - `PARTICIPANT` / `GUEST`: `roomJoin`, `canSubscribe`, `canPublish`, `canPublishData` (chat) — **no admin**.
+  - `HOST` / `CO_HOST`: the above **+ `roomAdmin`** (server-side mute/remove authority) **+ `canUpdateOwnMetadata`**.
+  A PARTICIPANT/GUEST can never receive `roomAdmin` because grants derive from the server-resolved role. (A subscribe-only OBSERVER media role is deferred to Step 6.)
+- **TTL ≤ 4 hours** (`LIVEKIT_TOKEN_TTL_SECONDS`), re-minted on a fresh join. No long-lived media tokens exist.
+- **Identity is non-guessable and server-chosen:** `user_<cuid>` for members, `guest_<uuid>` for guests.
+- **Rate limited:** 10 token requests / 15 min per IP.
+
+## Room invites & guest grants (implemented — Step 5)
+
+- Invite links are **stateless HMAC-SHA256 tokens** (`lib/media/invite.ts`) over `{ roomId, role, exp }`, signed with `INVITE_LINK_SECRET`, verified server-side with constant-time comparison, expiry enforcement, and room-match. Forged/expired/mismatched → generic rejection.
+- The **raw invite token never travels into the room URL**. On a guest join, the join page POSTs it once to `POST /api/livekit/guest`, which verifies it and sets a short-lived **httpOnly, Secure, SameSite=Strict guest-grant cookie** (`lib/media/guest-session.ts`) carrying `{ roomId, role, name, gid }`. The token endpoint reads that cookie — the invite is never re-exposed to client JS.
+- Invite links default to `GUEST` (never HOST). Step 6 adds a `Room.invitesRevoked` / per-link revocation check.
+
+## Host moderation & recording in LiveKit mode (deferred to Step 6)
+
+Force-mute, remove-participant, end-for-all, and recording require **server-side authority** (LiveKit `RoomServiceClient` / Egress with the API secret). In Step 5 the LiveKit client applies these as **host-local optimistic UI only** (clearly marked `TODO(step 6)`); they do not yet affect other participants or start real recording. This keeps the UI functional and honest without granting the browser privileged control.
 
 ## Room access control
 
@@ -66,7 +77,8 @@ Each refresh token is persisted in the `RefreshToken` table with a `familyId` sh
 ## Headers & CORS
 
 - Middleware sets: CSP (frame-ancestors 'none', explicit connect-src for WSS), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, HSTS, and a Permissions-Policy limiting camera/mic/display-capture to same-origin.
-- Known gap (tracked): CSP currently allows `unsafe-inline`/`unsafe-eval` for Next.js dev ergonomics and `connect-src wss: https:` until the real `LIVEKIT_URL` is known. **Before production:** move to nonce-based CSP and pin `connect-src` to the exact SFU origin.
+- `connect-src` is now pinned (Step 5) to `'self'` **plus the exact configured `LIVEKIT_URL` origin** (both `wss://host` and `https://host`) — no `wss:`/`https:` wildcards. In mock mode (no `LIVEKIT_URL`) it is `'self'` only. Additional TURN hosts, if a deployment uses them, are added to the same directive in `middleware.ts`.
+- Known gap (tracked): CSP still allows `unsafe-inline`/`unsafe-eval` for Next.js dev ergonomics + framer-motion inline styles. **Before production:** move to a nonce-based CSP.
 - CORS: same-origin by default (no `Access-Control-Allow-Origin: *` anywhere). If CityMind later needs API access, its exact origin gets allowlisted explicitly.
 
 ## Rate limiting (implemented — Step 3)

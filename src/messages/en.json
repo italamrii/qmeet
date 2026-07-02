@@ -2,20 +2,249 @@
   "common": {
     "appName": "Q Meet",
     "appNameLatin": "Q Meet",
-    "tagline": "A premium video meeting experience for modern teams",
+    "tagline": "Secure Saudi-built video meetings for modern teams and organizations.",
     "language": "Language",
     "loading": "Loading…"
   },
+  "nav": {
+    "brand": "Q Meet",
+    "features": "Features",
+    "pricing": "Pricing",
+    "security": "Security",
+    "contactSales": "Contact Sales",
+    "login": "Log in",
+    "getStarted": "Get Started",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu"
+  },
+  "footer": {
+    "tagline": "Q Meet — secure Arabic-first video meetings.",
+    "builtIn": "Built in Saudi Arabia.",
+    "security": "Security",
+    "contact": "Contact us",
+    "plans": "Plans"
+  },
   "landing": {
-    "scaffoldNotice": "The join and meeting room experience are ready to preview — running on mock media at this stage.",
-    "secureByDesign": "Secure by design",
-    "poweredBy": "Professional meeting platform",
-    "tryDemo": "Try a demo room"
+    "hero": {
+      "badge": "Secure by design",
+      "headline": "Secure video meetings for modern organizations",
+      "subheadline": "Q Meet is a professional video meeting platform built for secure, Arabic-first collaboration.",
+      "ctaPrimary": "Get Started",
+      "ctaMeeting": "Start a Meeting",
+      "ctaSales": "Contact Sales"
+    },
+    "trustBadges": [
+      "Saudi-built",
+      "100% Arabic-first",
+      "Encrypted secure connection",
+      "Enterprise permissions & control",
+      "Built for companies & teams",
+      "LiveKit-powered real-time media"
+    ],
+    "featuresTitle": "Everything you need for professional meetings",
+    "features": [
+      { "title": "High-quality video meetings", "description": "Clear audio and video for distributed and in-office teams." },
+      { "title": "Screen sharing", "description": "Present slides and documents seamlessly during calls." },
+      { "title": "Secure rooms with invite links", "description": "Invite participants with signed, time-limited links." },
+      { "title": "Host permissions", "description": "Control participants and settings from the host interface." },
+      { "title": "Arabic RTL interface", "description": "Native right-to-left experience for Arabic teams." },
+      { "title": "English support", "description": "Seamless switching between Arabic and English." },
+      { "title": "Session protection", "description": "Access tokens are minted server-side, never exposed in the browser." },
+      { "title": "Audit logs", "description": "Track platform events for compliance and review." },
+      { "title": "Education, consulting & enterprise", "description": "Flexible for internal meetings, training, and clients." }
+    ],
+    "whyTitle": "Why Q Meet?",
+    "whyItems": [
+      "Built for Arabic users — native RTL and Arabic as the default language",
+      "Saudi-first product mindset — designed for regional teams and organizations",
+      "Privacy-first — platform secrets never stored in the browser",
+      "Professional UI — simple for non-technical teams",
+      "No unnecessary complexity — start your meeting quickly",
+      "Full English support for bilingual teams"
+    ],
+    "useCasesTitle": "Use cases",
+    "useCases": [
+      { "title": "Companies", "description": "Team, management, and client meetings." },
+      { "title": "Consulting", "description": "Client sessions and remote project work." },
+      { "title": "Education & training", "description": "Virtual classrooms and workshops." },
+      { "title": "Internal meetings", "description": "Daily coordination across teams." },
+      { "title": "Job interviews", "description": "Secure video interviews with candidates." },
+      { "title": "Webinars", "description": "Group sessions with host controls." }
+    ],
+    "securityTitle": "Enterprise security",
+    "securityIntro": "Q Meet is built with security in mind from day one: secure sessions, clear permissions, API protection, audit logs, and no user secrets stored in the browser.",
+    "securityItems": [
+      "Secure sessions",
+      "Role-based access",
+      "Rate limiting",
+      "Input validation",
+      "Audit logs",
+      "Server-side LiveKit token generation",
+      "Secrets never exposed to the browser",
+      "HTTPS-ready deployment"
+    ],
+    "securityLink": "Read more about security",
+    "finalCta": {
+      "title": "Start secure video meetings for your organization.",
+      "primary": "Create account",
+      "secondary": "Contact sales"
+    }
+  },
+  "pricing": {
+    "title": "Subscription plans",
+    "subtitle": "Choose the right plan for your team. Online payment coming soon — instant activation for Free and Team.",
+    "plans": {
+      "free": {
+        "name": "Free",
+        "price": "0 SAR / month",
+        "description": "For individuals and initial evaluation.",
+        "cta": "Start Free",
+        "features": ["Limited meetings", "Short duration", "Limited participants", "Core experience"]
+      },
+      "team": {
+        "name": "Team",
+        "price": "49 SAR / user / month",
+        "description": "For small and medium teams.",
+        "cta": "Subscribe now",
+        "features": [
+          "Unlimited meetings",
+          "Secure invite links",
+          "Screen sharing",
+          "Host permissions",
+          "Arabic/English support",
+          "Performance priority"
+        ]
+      },
+      "business": {
+        "name": "Business",
+        "price": "Contact us",
+        "description": "For companies and institutions.",
+        "cta": "Contact Sales",
+        "features": [
+          "Custom onboarding",
+          "Team & user management",
+          "Audit logs",
+          "Security policies",
+          "Priority support",
+          "Custom domain (coming)",
+          "Custom hosting options (coming)"
+        ]
+      }
+    }
+  },
+  "signup": {
+    "title": "Create account",
+    "subtitle": "Set up your company account and start secure meetings.",
+    "companyName": "Company name",
+    "fullName": "Full name",
+    "workEmail": "Work email",
+    "password": "Password",
+    "passwordHint": "At least 12 characters.",
+    "plan": "Select plan",
+    "plans": {
+      "FREE": "Free",
+      "TEAM": "Team",
+      "BUSINESS": "Business"
+    },
+    "businessNote": "Subscription will be activated after we contact you.",
+    "submit": "Create account",
+    "hasAccount": "Already have an account?",
+    "loginLink": "Log in",
+    "errorGeneric": "Could not create account. Check your details and try again."
+  },
+  "login": {
+    "title": "Log in",
+    "subtitle": "Access your dashboard and meetings.",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Log in",
+    "error": "Invalid login credentials.",
+    "noAccount": "Don't have an account?",
+    "signupLink": "Sign up"
+  },
+  "contactSales": {
+    "title": "Contact sales",
+    "subtitle": "Tell us about your organization's needs and we'll get back to you soon.",
+    "name": "Name",
+    "company": "Company",
+    "email": "Email",
+    "phone": "Phone (optional)",
+    "companySize": "Company size",
+    "selectSize": "Select size",
+    "planInterest": "Plan interest",
+    "selectPlan": "Select plan",
+    "planTeam": "Team",
+    "planBusiness": "Business",
+    "message": "Message",
+    "submit": "Submit",
+    "error": "Could not submit your request. Please try again.",
+    "successTitle": "Request received",
+    "successHint": "Our team will contact you shortly."
+  },
+  "plans": {
+    "title": "Plans & pricing",
+    "subtitle": "Flexible plans for individuals, teams, and companies."
+  },
+  "securityPage": {
+    "title": "Security & trust",
+    "intro": "Q Meet is designed to reduce risk and raise the security bar — from sessions to infrastructure.",
+    "disclaimer": "We do not claim any system is \"unhackable.\" We commit to clear, reviewable security practices.",
+    "items": [
+      {
+        "title": "Secure by design",
+        "description": "Security is embedded in every layer: authentication, media, and APIs."
+      },
+      {
+        "title": "Server-side LiveKit tokens",
+        "description": "The server mints short-lived, least-privilege access tokens — no secrets in the browser."
+      },
+      {
+        "title": "Role-based permissions",
+        "description": "Platform and organization roles define what each user can do."
+      },
+      {
+        "title": "Input validation",
+        "description": "All client input passes through Zod schemas before processing."
+      },
+      {
+        "title": "Rate limiting",
+        "description": "Auth and token endpoints are protected from abuse."
+      },
+      {
+        "title": "Audit logs",
+        "description": "Platform events are recorded for review without storing meeting content."
+      },
+      {
+        "title": "HTTPS deployment",
+        "description": "Ready to deploy behind TLS with strict security headers."
+      },
+      {
+        "title": "Privacy-first",
+        "description": "Data minimization and no sensitive secrets stored on the client."
+      }
+    ]
+  },
+  "dashboard": {
+    "welcome": "Welcome, {name}",
+    "startMeeting": "Start a new meeting",
+    "roomTitlePlaceholder": "Meeting title",
+    "startNow": "Start meeting",
+    "currentPlan": "Current plan",
+    "pendingActivation": "Subscription will be activated after we contact you.",
+    "viewPlans": "View plans",
+    "myRooms": "My rooms",
+    "noRooms": "No rooms yet — create your first meeting.",
+    "join": "Join",
+    "recentMeetings": "Recent meetings",
+    "noMeetings": "No meetings yet",
+    "organization": "Organization",
+    "securityStatus": "Security status",
+    "securityOk": "Your sessions are protected with server tokens and encrypted transport.",
+    "securityDetails": "Security details"
   },
   "join": {
     "title": "Join meeting",
     "roomLabel": "Meeting room",
-    "mockRoomTitle": "Weekly Team Sync",
     "displayName": "Display name",
     "displayNamePlaceholder": "Enter your name as others will see it",
     "guestEmail": "Email (optional)",
@@ -30,14 +259,19 @@
     "invalidInvite": "Invite link is invalid or expired",
     "invalidInviteHint": "Ask the meeting organizer for a new invite link, or sign in if you have an account.",
     "permissionsNote": "Camera and microphone permissions are handled by your browser — your devices are never accessed without your explicit consent.",
-    "demoNote": "This is a demo preview. Your real camera and microphone will not be activated in this step.",
     "cameraPreview": "Camera preview",
     "previewOff": "Preview is off",
+    "previewLive": "Live preview",
+    "testDevices": "Test camera & mic",
+    "stopTest": "Stop test",
+    "permissionDenied": "Camera or microphone permission was denied. You can change this in your browser settings.",
+    "joinFailed": "Could not join the meeting. Please try again.",
     "nameRequired": "Please enter your display name",
     "backHome": "Back to home"
   },
   "room": {
-    "mockTitle": "Weekly Team Sync",
+    "configErrorTitle": "Platform not configured",
+    "configErrorHint": "The meeting service is currently unavailable. Contact your administrator.",
     "connection": {
       "connecting": "Connecting…",
       "connected": "Connected",
@@ -75,7 +309,7 @@
     "speakingNow": "Speaking",
     "screenShareLabel": "Screen share",
     "screenShareBy": "{name} is sharing their screen",
-    "screenSharePlaceholder": "Shared screen preview (mock mode)",
+    "screenSharePlaceholder": "Shared screen",
     "muteParticipant": "Mute {name}",
     "removeParticipant": "Remove {name} from the meeting",
     "typeMessage": "Type a message…",
@@ -83,6 +317,9 @@
     "noMessages": "No messages yet — start the conversation",
     "meetingEnded": "Meeting ended",
     "meetingEndedHint": "Thanks for joining. You can head back to the home page.",
+    "connectionFailed": "Couldn't connect to the meeting server",
+    "connectionFailedHint": "Check your internet connection and try again. If the problem persists, contact your administrator.",
+    "retry": "Try again",
     "backHome": "Back to home",
     "elapsed": "Meeting duration"
   }

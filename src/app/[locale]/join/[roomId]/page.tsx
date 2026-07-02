@@ -3,31 +3,40 @@
  * ---------------------------------------
  * Purpose: Pre-join route (/ar/join/[roomId], /en/join/[roomId]) — device
  * check + name entry before entering the room.
- * Depends on: JoinCard, next-intl.
+ * Depends on: JoinCard, resolveMediaProvider, verifyInviteToken, next-intl.
  * Security notes:
- *   - The invite token is verified HERE on the server; only a verdict
- *     ("guest" | "member" | "invalid") reaches the client — the raw token is
- *     never rendered into the page or stored client-side.
- *   - Step 4 uses a mock verdict; Step 5/6 replaces `mockInviteVerdict` with
- *     real HMAC signature + expiry verification (INVITE_LINK_SECRET) and a
- *     Room.invitesRevoked check.
+ *   - The invite token is verified HERE on the server (HMAC signature + expiry
+ *     + room match). Only a verdict ("guest" | "member" | "invalid") is used
+ *     for rendering; the raw token is passed to JoinCard solely so it can be
+ *     exchanged (once, over POST) for an httpOnly guest-grant cookie — it is
+ *     never rendered into the DOM or written to client storage.
+ *   - In mock mode any non-empty invite is treated as a valid guest link so the
+ *     demo guest flow is reviewable without configuring INVITE_LINK_SECRET.
  */
 import { setRequestLocale } from "next-intl/server";
 import { JoinCard, type InviteStatus } from "@/components/meeting/JoinCard";
+import { getMediaProvider, resolveMediaProvider } from "@/lib/media/provider";
+import { verifyInviteToken } from "@/lib/media/invite";
 
 /**
- * MOCK invite verification (Step 4 only).
- * Contract mirrors the real verifier: token in, verdict out.
- * - no token → "member" (authenticated account join)
- * - token "expired" / "invalid" → "invalid" (renders the error state)
- * - any other token → "guest" (valid signed invite)
- * @param inviteToken - Raw `invite` query param (unvalidated input).
- * @returns Verdict only — never the token. No side effects.
+ * Computes the invite verdict for the requested room.
+ * @param invite - Raw `invite` query param (unvalidated).
+ * @param roomId - Room the invite must match.
+ * @param provider - Active media provider.
+ * @returns "member" (no invite), "guest" (valid), or "invalid". No side effects.
  */
-function mockInviteVerdict(inviteToken: string | undefined): InviteStatus {
-  if (!inviteToken) return "member";
-  if (inviteToken === "expired" || inviteToken === "invalid") return "invalid";
-  return "guest";
+function inviteVerdict(
+  invite: string | undefined,
+  roomId: string,
+  provider: "mock" | "livekit"
+): InviteStatus {
+  if (!invite) return "member";
+  if (provider === "mock") {
+    // Mock: keep the reviewable demo behaviour (explicit sentinels are invalid).
+    return invite === "expired" || invite === "invalid" ? "invalid" : "guest";
+  }
+  // LiveKit: real HMAC verification, scoped to this room.
+  return verifyInviteToken(invite, roomId) ? "guest" : "invalid";
 }
 
 /**
@@ -43,11 +52,17 @@ export default function JoinPage({
   searchParams: { invite?: string };
 }) {
   setRequestLocale(locale);
-  const inviteStatus = mockInviteVerdict(searchParams.invite);
+  const provider = getMediaProvider();
+  const inviteStatus = inviteVerdict(searchParams.invite, roomId, provider);
 
   return (
     <main className="flex min-h-dvh items-center justify-center px-4 py-10">
-      <JoinCard roomId={roomId} inviteStatus={inviteStatus} />
+      <JoinCard
+        roomId={roomId}
+        inviteStatus={inviteStatus}
+        provider={provider}
+        inviteToken={inviteStatus === "guest" ? searchParams.invite : undefined}
+      />
     </main>
   );
 }

@@ -60,6 +60,31 @@ enum AuditEventType {
   RECORDING_STARTED
   RECORDING_STOPPED
   RECORDING_ACCESSED
+  LEAD_CREATED
+  ORG_CREATED
+}
+
+/// SaaS subscription tier for an organization.
+enum SubscriptionPlan {
+  FREE
+  TEAM
+  BUSINESS
+}
+
+/// Billing lifecycle for an organization (Stripe integration prepared, not wired).
+enum BillingStatus {
+  ACTIVE
+  TRIAL
+  PAST_DUE
+  CANCELLED
+  PENDING_CONTACT
+}
+
+/// Role within an organization (distinct from platform Role).
+enum OrgMemberRole {
+  OWNER
+  ADMIN
+  MEMBER
 }
 
 /// Registered platform user.
@@ -84,6 +109,7 @@ model User {
   participations MeetingParticipant[]
   auditEvents    AuditLog[]
   refreshTokens  RefreshToken[]
+  orgMemberships OrganizationMember[]
 
   @@index([role])
 }
@@ -133,6 +159,10 @@ model Room {
   createdBy   User   @relation("RoomCreator", fields: [createdById], references: [id])
   createdById String
 
+  /// Optional org scope — rooms created from the dashboard belong to an org.
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+
   /// Invite links are signed+time-limited (HMAC, INVITE_LINK_SECRET) and are
   /// NOT stored here — only verified. This flag lets a host kill all links.
   invitesRevoked Boolean @default(false)
@@ -144,6 +174,7 @@ model Room {
   meetings Meeting[]
 
   @@index([createdById])
+  @@index([organizationId])
   @@index([isActive])
 }
 
@@ -252,4 +283,56 @@ model AuditLog {
   @@index([eventType, createdAt])
   @@index([actorId])
   @@index([targetId])
+}
+
+/// Company / team tenant. Created at signup; drives plan and billing.
+model Organization {
+  id            String           @id @default(cuid())
+  name          String
+  /// URL-safe unique slug (derived from name at creation).
+  slug          String           @unique
+  plan          SubscriptionPlan @default(FREE)
+  billingStatus BillingStatus    @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members OrganizationMember[]
+  rooms   Room[]
+
+  @@index([plan])
+}
+
+/// Links a user to an organization with an org-level role.
+model OrganizationMember {
+  id             String         @id @default(cuid())
+  user           User           @relation(fields: [userId], references: [id])
+  userId         String
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  organizationId String
+  role           OrgMemberRole  @default(MEMBER)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+}
+
+/// Sales / contact form submission (no email integration required yet).
+model Lead {
+  id          String  @id @default(cuid())
+  name        String
+  company     String
+  email       String
+  phone       String?
+  companySize String?
+  message     String?
+  planInterest SubscriptionPlan?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([createdAt])
 }
