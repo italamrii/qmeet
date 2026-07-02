@@ -24,8 +24,9 @@ import {
   Square,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import type { MediaParticipant } from "@/lib/media/types";
+import type { LocalMediaState, MediaParticipant } from "@/lib/media/types";
 import { cn } from "@/lib/utils";
+import { CameraOptionsMenu } from "./CameraOptionsMenu";
 
 export type PanelKind = "participants" | "chat" | null;
 
@@ -87,6 +88,10 @@ export function MeetingControls({
   onTogglePanel,
   onLeave,
   onEndMeeting,
+  localMedia,
+  onSwitchCamera,
+  onToggleMirror,
+  onUnlockAudio,
 }: {
   localParticipant: MediaParticipant;
   isHost: boolean;
@@ -100,12 +105,19 @@ export function MeetingControls({
   onTogglePanel: (panel: Exclude<PanelKind, null>) => void;
   onLeave: () => void;
   onEndMeeting: () => void;
+  localMedia: LocalMediaState;
+  onSwitchCamera: () => void;
+  onToggleMirror: () => void;
+  onUnlockAudio: () => void;
 }) {
   const t = useTranslations("room");
   const { isMuted, isCameraOn, isScreenSharing } = localParticipant;
 
   return (
-    <div className="card-sheen flex items-center justify-center gap-2 border-t border-border/60 bg-card/70 px-3 py-3 backdrop-blur-md sm:gap-3">
+    <div
+      className="card-sheen flex items-center justify-center gap-2 border-t border-border/60 bg-card/70 px-3 py-3 backdrop-blur-md sm:gap-3"
+      onPointerDown={onUnlockAudio}
+    >
       {/* Device controls */}
       <ControlButton
         label={isMuted ? t("unmuteMic") : t("muteMic")}
@@ -124,6 +136,15 @@ export function MeetingControls({
       >
         {isCameraOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
       </ControlButton>
+
+      {(localMedia.supportsCameraSwitch || isCameraOn) && (
+        <CameraOptionsMenu
+          localMedia={localMedia}
+          cameraOn={isCameraOn}
+          onSwitchCamera={onSwitchCamera}
+          onToggleMirror={onToggleMirror}
+        />
+      )}
 
       <ControlButton
         label={isScreenSharing ? t("stopSharing") : t("shareScreen")}

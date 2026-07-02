@@ -19,9 +19,12 @@
 import {
   Room,
   RoomEvent,
+  Track,
   ConnectionState as LKConnectionState,
   type Participant,
   type RemoteParticipant,
+  type TrackPublication,
+  type RemoteTrack,
 } from "livekit-client";
 import type {
   ChatMessage,
@@ -31,6 +34,22 @@ import type {
   MediaRoomClient,
   RoomSnapshot,
 } from "./types";
+import {
+  getCameraVideoTrack,
+  getScreenShareVideoTrack,
+  getMicrophoneAudioTrack,
+  lkDevLog,
+  toVideoAttachment,
+  toAudioAttachment,
+} from "./livekit-tracks";
+import { isMobileDevice } from "./device-utils";
+import {
+  defaultMirrorForFacing,
+  readMirrorPreference,
+  resolveMirrorPreference,
+  writeMirrorPreference,
+} from "./mirror-preference";
+import type { LocalMediaState } from "./types";
 
 /** Data-channel topic for in-room chat messages. */
 const CHAT_TOPIC = "qm-chat";
@@ -101,9 +120,15 @@ export class LiveKitMediaClient implements MediaRoomClient {
   private snapshot: RoomSnapshot;
   private started = false;
 
+  private cameraFacing: LocalMediaState["cameraFacing"] = "unknown";
+  private mirrorCamera = true;
+  private supportsCameraSwitch = false;
+  private videoDeviceIndex = 0;
+  private audioPlaybackReady = false;
+
   constructor(private readonly options: LiveKitClientOptions) {
     this.room = new Room({ adaptiveStream: true, dynacast: true });
-    // Deterministic initial snapshot (nothing connected yet).
+    this.mirrorCamera = resolveMirrorPreference("user");
     this.snapshot = {
       connection: "connecting",
       startedAt: null,
@@ -112,6 +137,12 @@ export class LiveKitMediaClient implements MediaRoomClient {
       messages: [],
       activeSpeakerId: null,
       hasEnded: false,
+      localMedia: {
+        mirrorCamera: this.mirrorCamera,
+        supportsCameraSwitch: isMobileDevice(),
+        cameraFacing: "unknown",
+      },
+      audioPlaybackReady: false,
     };
   }
 
@@ -140,8 +171,11 @@ export class LiveKitMediaClient implements MediaRoomClient {
         await this.room.localParticipant.setMicrophoneEnabled(true).catch(() => undefined);
       }
       if (this.options.initialCameraOn) {
-        await this.room.localParticipant.setCameraEnabled(true).catch(() => undefined);
+        await this.room.localParticipant.setCameraEnabled(true, { facingMode: "user" }).catch(() => undefined);
+        this.cameraFacing = "user";
+        await this.refreshDeviceCapabilities();
       }
+      await this.ensureAudioPlayback();
       this.rebuild();
     } catch (error) {
       this.connection = "disconnected";
@@ -161,18 +195,85 @@ export class LiveKitMediaClient implements MediaRoomClient {
   async toggleMicrophone(): Promise<void> {
     const enabled = this.room.localParticipant.isMicrophoneEnabled;
     await this.room.localParticipant.setMicrophoneEnabled(!enabled).catch(() => undefined);
+    await this.ensureAudioPlayback();
     this.rebuild();
   }
 
   async toggleCamera(): Promise<void> {
     const enabled = this.room.localParticipant.isCameraEnabled;
-    await this.room.localParticipant.setCameraEnabled(!enabled).catch(() => undefined);
+    if (enabled) {
+      await this.room.localParticipant.setCameraEnabled(false).catch(() => undefined);
+    } else {
+      const facing = this.cameraFacing === "unknown" ? "user" : this.cameraFacing;
+      await this.room.localParticipant.setCameraEnabled(true, { facingMode: facing }).catch(() => undefined);
+      this.cameraFacing = facing;
+      await this.refreshDeviceCapabilities();
+    }
     this.rebuild();
+  }
+
+  switchCamera(): void {
+    void this.doSwitchCamera();
+  }
+
+  setMirrorLocalCamera(mirror: boolean): void {
+    this.mirrorCamera = mirror;
+    writeMirrorPreference(mirror);
+    this.rebuild();
+  }
+
+  unlockAudio(): void {
+    void this.ensureAudioPlayback().then(() => this.rebuild());
+  }
+
+  private async doSwitchCamera(): Promise<void> {
+    if (!this.snapshot.localMedia.supportsCameraSwitch) return;
+
+    try {
+      const devices = await Room.getLocalDevices("videoinput", true);
+      if (devices.length >= 2) {
+        this.videoDeviceIndex = (this.videoDeviceIndex + 1) % devices.length;
+        const device = devices[this.videoDeviceIndex];
+        if (device) {
+          await this.room.switchActiveDevice("videoinput", device.deviceId);
+          const label = device.label.toLowerCase();
+          if (label.includes("back") || label.includes("rear") || label.includes("environment")) {
+            this.cameraFacing = "environment";
+          } else if (label.includes("front") || label.includes("user")) {
+            this.cameraFacing = "user";
+          }
+        }
+      } else if (this.room.localParticipant.isCameraEnabled) {
+        const nextFacing = this.cameraFacing === "user" ? "environment" : "user";
+        await this.room.localParticipant.setCameraEnabled(true, { facingMode: nextFacing });
+        this.cameraFacing = nextFacing;
+      } else {
+        this.cameraFacing = this.cameraFacing === "user" ? "environment" : "user";
+      }
+
+      if (readMirrorPreference() === null) {
+        this.mirrorCamera = defaultMirrorForFacing(this.cameraFacing);
+      }
+      await this.refreshDeviceCapabilities();
+      this.rebuild();
+    } catch {
+      lkDevLog("camera switch failed");
+    }
+  }
+
+  private async refreshDeviceCapabilities(): Promise<void> {
+    try {
+      const devices = await Room.getLocalDevices("videoinput", true);
+      this.supportsCameraSwitch = devices.length > 1 || isMobileDevice();
+    } catch {
+      this.supportsCameraSwitch = isMobileDevice();
+    }
   }
 
   async toggleScreenShare(): Promise<void> {
     const enabled = this.room.localParticipant.isScreenShareEnabled;
     await this.room.localParticipant.setScreenShareEnabled(!enabled).catch(() => undefined);
+    lkDevLog(enabled ? "screen share stopped" : "screen share published");
     this.rebuild();
   }
 
@@ -224,19 +325,66 @@ export class LiveKitMediaClient implements MediaRoomClient {
     this.disconnect();
   }
 
+  private async ensureAudioPlayback(): Promise<void> {
+    try {
+      await this.room.startAudio();
+      if (!this.audioPlaybackReady) {
+        lkDevLog("audio playback started");
+      }
+      this.audioPlaybackReady = true;
+    } catch {
+      if (this.audioPlaybackReady) {
+        lkDevLog("audio playback blocked");
+      }
+      this.audioPlaybackReady = false;
+    }
+  }
+
   // --- internals -------------------------------------------------------------
 
   private wireEvents(): void {
     const rebuild = () => this.rebuild();
     this.room
       .on(RoomEvent.ConnectionStateChanged, rebuild)
-      .on(RoomEvent.ParticipantConnected, rebuild)
+      .on(RoomEvent.ParticipantConnected, (participant) => {
+        lkDevLog("participant connected", { identity: participant.identity });
+        rebuild();
+      })
       .on(RoomEvent.ParticipantDisconnected, rebuild)
-      .on(RoomEvent.TrackSubscribed, rebuild)
+      .on(RoomEvent.TrackSubscribed, (track: RemoteTrack, publication: TrackPublication, participant) => {
+        if (track.kind === "audio" && publication.source === Track.Source.Microphone) {
+          lkDevLog("audio track subscribed", { identity: participant?.identity });
+          void this.ensureAudioPlayback();
+        }
+        lkDevLog("track subscribed", {
+          kind: track.kind,
+          source: publication.source,
+          identity: participant?.identity,
+        });
+        rebuild();
+      })
       .on(RoomEvent.TrackUnsubscribed, rebuild)
-      .on(RoomEvent.TrackMuted, rebuild)
-      .on(RoomEvent.TrackUnmuted, rebuild)
-      .on(RoomEvent.LocalTrackPublished, rebuild)
+      .on(RoomEvent.TrackMuted, (publication: TrackPublication) => {
+        if (publication.source === Track.Source.Microphone) {
+          lkDevLog("audio track muted", { source: publication.source });
+        } else {
+          lkDevLog("track muted", { source: publication.source });
+        }
+        rebuild();
+      })
+      .on(RoomEvent.TrackUnmuted, (publication: TrackPublication) => {
+        if (publication.source === Track.Source.Microphone) {
+          lkDevLog("audio track unmuted", { source: publication.source });
+          void this.ensureAudioPlayback();
+        } else {
+          lkDevLog("track unmuted", { source: publication.source });
+        }
+        rebuild();
+      })
+      .on(RoomEvent.LocalTrackPublished, (publication: TrackPublication) => {
+        lkDevLog("local track published", { source: publication.source });
+        rebuild();
+      })
       .on(RoomEvent.LocalTrackUnpublished, rebuild)
       .on(RoomEvent.TrackPublished, rebuild)
       .on(RoomEvent.TrackUnpublished, rebuild)
@@ -282,6 +430,10 @@ export class LiveKitMediaClient implements MediaRoomClient {
       this.joinedAt.set(id, participant.joinedAt?.toISOString() ?? new Date().toISOString());
     }
     const fallbackRole: MediaRole = isLocal ? this.options.role : "PARTICIPANT";
+    const cameraTrack = getCameraVideoTrack(participant);
+    const screenTrack = getScreenShareVideoTrack(participant);
+    const micTrack = getMicrophoneAudioTrack(participant, isLocal);
+
     return {
       id,
       name: participant.name || participant.identity,
@@ -292,6 +444,11 @@ export class LiveKitMediaClient implements MediaRoomClient {
       isSpeaking: participant.isSpeaking,
       isScreenSharing: participant.isScreenShareEnabled,
       joinedAt: this.joinedAt.get(id) ?? new Date().toISOString(),
+      cameraVideoTrack: toVideoAttachment(cameraTrack),
+      screenShareVideoTrack: toVideoAttachment(screenTrack),
+      microphoneAudioTrack: toAudioAttachment(micTrack),
+      hasAudioTrack: !isLocal && Boolean(micTrack),
+      mirrorPreview: isLocal ? this.mirrorCamera : undefined,
     };
   }
 
@@ -322,6 +479,12 @@ export class LiveKitMediaClient implements MediaRoomClient {
       messages: this.messages,
       activeSpeakerId: this.activeSpeakerId,
       hasEnded: this.hasEnded,
+      localMedia: {
+        mirrorCamera: this.mirrorCamera,
+        supportsCameraSwitch: this.supportsCameraSwitch,
+        cameraFacing: this.cameraFacing,
+      },
+      audioPlaybackReady: this.audioPlaybackReady,
     };
     this.listeners.forEach((listener) => listener());
   }

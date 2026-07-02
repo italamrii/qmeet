@@ -21,6 +21,8 @@ import {
 import { SiteHeader } from "./SiteHeader";
 import { SiteFooter } from "./SiteFooter";
 import { PricingSection } from "./PricingSection";
+import { JoinByCodeForm } from "./JoinByCodeForm";
+import { ContactEmail } from "./ContactEmail";
 
 const fade = {
   initial: { opacity: 0, y: 16 },
@@ -31,6 +33,7 @@ const fade = {
 
 export function LandingPageContent() {
   const t = useTranslations("landing");
+  const tSupport = useTranslations("landingSupport");
   const trust = t.raw("trustBadges") as string[];
   const features = t.raw("features") as { title: string; description: string }[];
   const why = t.raw("whyItems") as string[];
@@ -67,17 +70,19 @@ export function LandingPageContent() {
             </Link>
             <Link
               href="/dashboard"
-              className="rounded-full border border-border/70 px-6 py-3 text-sm font-medium hover:bg-secondary"
+              className="rounded-full border border-border/70 px-6 py-3 text-sm font-medium text-foreground/90 transition-colors hover:bg-secondary"
             >
               {t("hero.ctaMeeting")}
             </Link>
+          </motion.div>
+          <motion.p {...fade} className="mt-4">
             <Link
               href="/contact-sales"
-              className="rounded-full border border-glow/30 px-6 py-3 text-sm text-accent-foreground hover:bg-glow-faint"
+              className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
             >
               {t("hero.ctaSales")}
             </Link>
-          </motion.div>
+          </motion.p>
         </div>
       </section>
 
@@ -92,6 +97,13 @@ export function LandingPageContent() {
               {badge}
             </span>
           ))}
+        </div>
+      </section>
+
+      {/* Join by code */}
+      <section className="px-4 py-10 sm:px-6">
+        <div className="card-sheen mx-auto max-w-xl rounded-xl border p-6">
+          <JoinByCodeForm />
         </div>
       </section>
 
@@ -187,6 +199,15 @@ export function LandingPageContent() {
               {t("finalCta.secondary")}
             </Link>
           </div>
+        </div>
+      </section>
+
+      {/* Support / contact */}
+      <section className="border-t border-border/40 px-4 py-12 sm:px-6">
+        <div className="mx-auto max-w-xl text-center">
+          <h2 className="text-xl font-semibold tracking-header">{tSupport("title")}</h2>
+          <p className="mt-2 text-sm text-muted-foreground">{tSupport("subtitle")}</p>
+          <ContactEmail className="mt-4 text-sm" />
         </div>
       </section>
 

@@ -21,6 +21,21 @@ export type MediaRole = "HOST" | "CO_HOST" | "PARTICIPANT" | "GUEST";
 /** Connection lifecycle of the room session. */
 export type ConnectionState = "connecting" | "connected" | "reconnecting" | "disconnected";
 
+/** Attach/detach hook for a provider video track (LiveKit in production). */
+export interface VideoTrackAttachment {
+  /** Stable id (track sid) so React effects do not thrash on snapshot rebuilds. */
+  id: string;
+  attach(element: HTMLVideoElement): void;
+  detach(element: HTMLVideoElement): void;
+}
+
+/** Attach/detach hook for a remote microphone audio track (LiveKit in production). */
+export interface AudioTrackAttachment {
+  id: string;
+  attach(element: HTMLAudioElement): void;
+  detach(element: HTMLAudioElement): void;
+}
+
 /** One participant as the UI sees them. */
 export interface MediaParticipant {
   id: string;
@@ -33,6 +48,16 @@ export interface MediaParticipant {
   isScreenSharing: boolean;
   /** ISO timestamp of when the participant joined. */
   joinedAt: string;
+  /** Camera video track — set in LiveKit mode when a video track is available. */
+  cameraVideoTrack?: VideoTrackAttachment;
+  /** Screen-share video track — set when screen share is active. */
+  screenShareVideoTrack?: VideoTrackAttachment;
+  /** Remote-only: subscribed microphone audio track for playback. */
+  microphoneAudioTrack?: AudioTrackAttachment;
+  /** True when a remote mic track is subscribed and not muted. */
+  hasAudioTrack?: boolean;
+  /** Local-only: whether the camera preview is mirrored. */
+  mirrorPreview?: boolean;
 }
 
 /** One in-room chat message (LiveKit data channels in Step 5 — no DB persistence). */
@@ -46,6 +71,15 @@ export interface ChatMessage {
   isLocal: boolean;
 }
 
+export interface LocalMediaState {
+  /** Mirror local camera preview (remote viewers unaffected). */
+  mirrorCamera: boolean;
+  /** Whether switch-camera is available on this device. */
+  supportsCameraSwitch: boolean;
+  /** Active camera facing when known. */
+  cameraFacing: "user" | "environment" | "unknown";
+}
+
 /** Immutable snapshot of the whole room state, replaced on every change. */
 export interface RoomSnapshot {
   connection: ConnectionState;
@@ -57,6 +91,10 @@ export interface RoomSnapshot {
   activeSpeakerId: string | null;
   /** True after the host ends the meeting for everyone. */
   hasEnded: boolean;
+  /** Local device UI state (preview mirror, camera switch availability). */
+  localMedia: LocalMediaState;
+  /** True when browser audio playback is unlocked (LiveKit startAudio succeeded). */
+  audioPlaybackReady: boolean;
 }
 
 /** Options the UI provides when joining a room. */
@@ -88,6 +126,14 @@ export interface MediaRoomClient {
   toggleCamera(): void;
   toggleScreenShare(): void;
   sendChatMessage(text: string): void;
+
+  /** Switch front/back or next video input device. */
+  switchCamera(): void;
+  /** Toggle local preview mirror (does not affect remote stream). */
+  setMirrorLocalCamera(mirror: boolean): void;
+
+  /** Resume remote audio playback after a user gesture (browser autoplay policy). */
+  unlockAudio(): void;
 
   // --- Host-only (UI-gated here; token-grant-enforced in Step 5) ---
   muteParticipant(participantId: string): void;

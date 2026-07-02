@@ -13,10 +13,18 @@
 import type {
   ChatMessage,
   JoinOptions,
+  LocalMediaState,
   MediaParticipant,
   MediaRoomClient,
   RoomSnapshot,
 } from "./types";
+import { isMobileDevice } from "./device-utils";
+import {
+  defaultMirrorForFacing,
+  readMirrorPreference,
+  resolveMirrorPreference,
+  writeMirrorPreference,
+} from "./mirror-preference";
 
 /** Fixed timestamps keep the initial snapshot deterministic across SSR/hydration. */
 const SEED_TIME = "2026-07-02T17:00:00.000Z";
@@ -71,6 +79,8 @@ export class MockMediaClient implements MediaRoomClient {
   private speakingTimer: ReturnType<typeof setInterval> | null = null;
   private speakerCursor = 0;
   private connected = false;
+  private cameraFacing: LocalMediaState["cameraFacing"] = "user";
+  private mirrorCamera = resolveMirrorPreference("user");
 
   constructor(private readonly options: JoinOptions) {
     const local: MediaParticipant = {
@@ -83,6 +93,7 @@ export class MockMediaClient implements MediaRoomClient {
       isSpeaking: false,
       isScreenSharing: false,
       joinedAt: SEED_TIME,
+      mirrorPreview: this.mirrorCamera,
     };
     const remotes: MediaParticipant[] = REMOTE_SEED.map((seed, index) => ({
       ...seed,
@@ -103,6 +114,12 @@ export class MockMediaClient implements MediaRoomClient {
       messages: [...SEED_MESSAGES],
       activeSpeakerId: null,
       hasEnded: false,
+      localMedia: {
+        mirrorCamera: this.mirrorCamera,
+        supportsCameraSwitch: isMobileDevice(),
+        cameraFacing: this.cameraFacing,
+      },
+      audioPlaybackReady: false,
     };
   }
 
@@ -175,6 +192,35 @@ export class MockMediaClient implements MediaRoomClient {
 
   toggleCamera(): void {
     this.updateParticipant(LOCAL_ID, (p) => ({ ...p, isCameraOn: !p.isCameraOn }));
+  }
+
+  switchCamera(): void {
+    if (!this.snapshot.localMedia.supportsCameraSwitch) return;
+    this.cameraFacing = this.cameraFacing === "user" ? "environment" : "user";
+    if (readMirrorPreference() === null) {
+      this.mirrorCamera = defaultMirrorForFacing(this.cameraFacing);
+    }
+    this.updateParticipant(LOCAL_ID, (p) => ({ ...p, mirrorPreview: this.mirrorCamera }));
+    this.patch({
+      localMedia: {
+        ...this.snapshot.localMedia,
+        cameraFacing: this.cameraFacing,
+        mirrorCamera: this.mirrorCamera,
+      },
+    });
+  }
+
+  setMirrorLocalCamera(mirror: boolean): void {
+    this.mirrorCamera = mirror;
+    writeMirrorPreference(mirror);
+    this.updateParticipant(LOCAL_ID, (p) => ({ ...p, mirrorPreview: mirror }));
+    this.patch({
+      localMedia: { ...this.snapshot.localMedia, mirrorCamera: mirror },
+    });
+  }
+
+  unlockAudio(): void {
+    /* no-op in mock mode */
   }
 
   toggleScreenShare(): void {

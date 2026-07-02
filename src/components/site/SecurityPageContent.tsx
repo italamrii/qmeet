@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { Shield } from "lucide-react";
 import { SiteHeader } from "./SiteHeader";
 import { SiteFooter } from "./SiteFooter";
+import { ContactEmail } from "./ContactEmail";
 
 export function SecurityPageContent() {
   const t = useTranslations("securityPage");
@@ -29,6 +30,9 @@ export function SecurityPageContent() {
               <p className="mt-2 text-sm text-muted-foreground">{item.description}</p>
             </div>
           ))}
+        </div>
+        <div className="mt-10 rounded-xl border border-border/60 p-5 text-center">
+          <ContactEmail className="text-sm text-muted-foreground" />
         </div>
       </main>
       <SiteFooter />

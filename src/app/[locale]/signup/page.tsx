@@ -4,17 +4,9 @@ import { SiteFooter } from "@/components/site/SiteFooter";
 import { SignupForm } from "@/components/site/SignupForm";
 import { Link } from "@/i18n/navigation";
 
-export default async function SignupPage({
-  params: { locale },
-  searchParams,
-}: {
-  params: { locale: string };
-  searchParams: { plan?: string };
-}) {
+export default async function SignupPage({ params: { locale } }: { params: { locale: string } }) {
   setRequestLocale(locale);
   const t = await getTranslations("signup");
-  const plan =
-    searchParams.plan === "team" ? "TEAM" : searchParams.plan === "business" ? "BUSINESS" : "FREE";
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -23,7 +15,7 @@ export default async function SignupPage({
         <h1 className="text-2xl font-semibold tracking-header">{t("title")}</h1>
         <p className="mt-2 text-sm text-muted-foreground">{t("subtitle")}</p>
         <div className="mt-8">
-          <SignupForm defaultPlan={plan} />
+          <SignupForm />
         </div>
         <p className="mt-6 text-center text-sm text-muted-foreground">
           {t("hasAccount")}{" "}

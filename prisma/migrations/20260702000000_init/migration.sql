@@ -1,4 +1,4 @@
-﻿-- CreateEnum
+-- CreateEnum
 CREATE TYPE "Role" AS ENUM ('ADMIN', 'HOST', 'PARTICIPANT', 'OBSERVER');
 
 -- CreateEnum

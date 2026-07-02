@@ -8,13 +8,10 @@ import { useTranslations, useLocale } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { Loader2 } from "lucide-react";
 
-type Plan = "FREE" | "TEAM" | "BUSINESS";
-
-export function SignupForm({ defaultPlan = "FREE" }: { defaultPlan?: Plan }) {
+export function SignupForm() {
   const t = useTranslations("signup");
   const locale = useLocale();
   const router = useRouter();
-  const [plan, setPlan] = useState<Plan>(defaultPlan);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -28,7 +25,7 @@ export function SignupForm({ defaultPlan = "FREE" }: { defaultPlan?: Plan }) {
       email: String(fd.get("email")),
       name: String(fd.get("name")),
       password: String(fd.get("password")),
-      plan,
+      plan: "FREE" as const,
       preferredLocale: locale,
     };
     try {
@@ -38,8 +35,25 @@ export function SignupForm({ defaultPlan = "FREE" }: { defaultPlan?: Plan }) {
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as { error?: string } | null;
-        setError(data?.error ?? t("errorGeneric"));
+        const data = (await res.json().catch(() => null)) as { code?: string } | null;
+        const code = data?.code;
+        const knownCodes = [
+          "DATABASE_NOT_CONFIGURED",
+          "DATABASE_UNAVAILABLE",
+          "EMAIL_ALREADY_EXISTS",
+          "PASSWORD_TOO_SHORT",
+          "COMPANY_NAME_REQUIRED",
+          "INVALID_EMAIL",
+          "INVALID_INPUT",
+          "RATE_LIMITED",
+          "SERVICE_NOT_CONFIGURED",
+          "UNEXPECTED_ERROR",
+        ] as const;
+        if (code && knownCodes.includes(code as (typeof knownCodes)[number])) {
+          setError(t(`errors.${code}`));
+        } else {
+          setError(t("errorGeneric"));
+        }
         return;
       }
       router.push("/dashboard");
@@ -102,25 +116,7 @@ export function SignupForm({ defaultPlan = "FREE" }: { defaultPlan?: Plan }) {
         />
         <p className="mt-1 text-xs text-muted-foreground">{t("passwordHint")}</p>
       </div>
-      <fieldset>
-        <legend className="text-sm font-medium">{t("plan")}</legend>
-        <div className="mt-2 flex flex-col gap-2">
-          {(["FREE", "TEAM", "BUSINESS"] as const).map((p) => (
-            <label key={p} className="flex cursor-pointer items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="planRadio"
-                checked={plan === p}
-                onChange={() => setPlan(p)}
-              />
-              {t(`plans.${p}`)}
-            </label>
-          ))}
-        </div>
-        {plan === "BUSINESS" && (
-          <p className="mt-2 text-xs text-muted-foreground">{t("businessNote")}</p>
-        )}
-      </fieldset>
+      <p className="text-xs text-muted-foreground">{t("freeNote")}</p>
       {error && <p className="text-sm text-red-400">{error}</p>}
       <button
         type="submit"

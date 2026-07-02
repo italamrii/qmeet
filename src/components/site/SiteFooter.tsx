@@ -7,6 +7,7 @@
 
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
+import { ContactEmail } from "./ContactEmail";
 
 export function SiteFooter() {
   const t = useTranslations("footer");
@@ -17,6 +18,7 @@ export function SiteFooter() {
         <div>
           <p className="font-semibold tracking-header">{t("tagline")}</p>
           <p className="mt-1 text-sm text-muted-foreground">{t("builtIn")}</p>
+          <ContactEmail className="mt-3 text-sm text-muted-foreground" />
         </div>
         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
           <Link href="/security" className="hover:text-foreground">
@@ -26,7 +28,7 @@ export function SiteFooter() {
             {t("contact")}
           </Link>
           <Link href="/plans" className="hover:text-foreground">
-            {t("plans")}
+            {t("freeAccess")}
           </Link>
         </div>
       </div>

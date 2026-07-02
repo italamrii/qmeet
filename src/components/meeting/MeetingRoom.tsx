@@ -26,6 +26,8 @@ import { MeetingControls, type PanelKind } from "./MeetingControls";
 import { MeetingTimer } from "./MeetingTimer";
 import { ParticipantsPanel } from "./ParticipantsPanel";
 import { RecordingBadge } from "./RecordingBadge";
+import { RemoteAudioTracks } from "./RemoteAudioTracks";
+import { AudioStatusBadge } from "./AudioStatusBadge";
 import { VideoGrid } from "./VideoGrid";
 
 /**
@@ -151,6 +153,7 @@ export function MeetingRoom({
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden">
+      <RemoteAudioTracks participants={room.participants} />
       {/* ---- Header ---- */}
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border/60 bg-card/40 px-3 backdrop-blur-md sm:px-5">
         <span className="hidden items-center gap-1.5 sm:flex">
@@ -171,6 +174,10 @@ export function MeetingRoom({
         <div className="ms-auto flex items-center gap-2">
           {room.isRecording && <RecordingBadge />}
           <MeetingTimer startedAt={room.startedAt} />
+          <AudioStatusBadge
+            audioPlaybackReady={room.audioPlaybackReady}
+            participants={room.participants}
+          />
           <ConnectionBadge state={room.connection} />
         </div>
       </header>
@@ -257,6 +264,10 @@ export function MeetingRoom({
           onTogglePanel={togglePanel}
           onLeave={leave}
           onEndMeeting={() => client.endMeeting()}
+          localMedia={room.localMedia}
+          onSwitchCamera={() => client.switchCamera()}
+          onToggleMirror={() => client.setMirrorLocalCamera(!room.localMedia.mirrorCamera)}
+          onUnlockAudio={() => client.unlockAudio()}
         />
       )}
     </main>

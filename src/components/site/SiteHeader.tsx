@@ -18,8 +18,9 @@ export function SiteHeader() {
   const [open, setOpen] = useState(false);
 
   const links = [
+    { href: "/join", label: t("join") },
     { href: "/#features", label: t("features") },
-    { href: "/#pricing", label: t("pricing") },
+    { href: "/#pricing", label: t("free") },
     { href: "/security", label: t("security") },
     { href: "/contact-sales", label: t("contactSales") },
   ] as const;

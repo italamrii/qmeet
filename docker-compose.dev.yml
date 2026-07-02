@@ -1,0 +1,24 @@
+# Local PostgreSQL for Q Meet development.
+# Start: docker compose -f docker-compose.dev.yml up -d
+# Then add to .env.local (see .env.example):
+#   DATABASE_URL=postgresql://qmeet:qmeet_dev@localhost:5432/qimam_meet?schema=public
+#   AUTH_ACCESS_TOKEN_SECRET=<openssl rand -base64 48>
+#   AUTH_REFRESH_TOKEN_SECRET=<openssl rand -base64 48>
+# Run migrations: npx prisma migrate deploy
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: qmeet-postgres
+    restart: unless-stopped
+    ports:
+      - "55432:5432"
+    environment:
+      POSTGRES_USER: qmeet
+      POSTGRES_PASSWORD: qmeet_dev
+      POSTGRES_DB: qimam_meet
+    volumes:
+      - qmeet_pg_data:/var/lib/postgresql/data
+
+volumes:
+  qmeet_pg_data:

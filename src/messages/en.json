@@ -9,11 +9,12 @@
   "nav": {
     "brand": "Q Meet",
     "features": "Features",
-    "pricing": "Pricing",
+    "free": "Free",
     "security": "Security",
     "contactSales": "Contact Sales",
     "login": "Log in",
     "getStarted": "Get Started",
+    "join": "Join",
     "openMenu": "Open menu",
     "closeMenu": "Close menu"
   },
@@ -22,11 +23,14 @@
     "builtIn": "Built in Saudi Arabia.",
     "security": "Security",
     "contact": "Contact us",
-    "plans": "Plans"
+    "freeAccess": "Free access"
+  },
+  "contact": {
+    "label": "Contact:"
   },
   "landing": {
     "hero": {
-      "badge": "Secure by design",
+      "badge": "Completely free for now",
       "headline": "Secure video meetings for modern organizations",
       "subheadline": "Q Meet is a professional video meeting platform built for secure, Arabic-first collaboration.",
       "ctaPrimary": "Get Started",
@@ -91,46 +95,25 @@
     }
   },
   "pricing": {
-    "title": "Subscription plans",
-    "subtitle": "Choose the right plan for your team. Online payment coming soon — instant activation for Free and Team.",
-    "plans": {
-      "free": {
-        "name": "Free",
-        "price": "0 SAR / month",
-        "description": "For individuals and initial evaluation.",
-        "cta": "Start Free",
-        "features": ["Limited meetings", "Short duration", "Limited participants", "Core experience"]
-      },
-      "team": {
-        "name": "Team",
-        "price": "49 SAR / user / month",
-        "description": "For small and medium teams.",
-        "cta": "Subscribe now",
-        "features": [
-          "Unlimited meetings",
-          "Secure invite links",
-          "Screen sharing",
-          "Host permissions",
-          "Arabic/English support",
-          "Performance priority"
-        ]
-      },
-      "business": {
-        "name": "Business",
-        "price": "Contact us",
-        "description": "For companies and institutions.",
-        "cta": "Contact Sales",
-        "features": [
-          "Custom onboarding",
-          "Team & user management",
-          "Audit logs",
-          "Security policies",
-          "Priority support",
-          "Custom domain (coming)",
-          "Custom hosting options (coming)"
-        ]
-      }
-    }
+    "freeTitle": "Completely free for now",
+    "freeSubtitle": "Use Q Meet for video meetings without a paid subscription during this stage.",
+    "freeFeatures": [
+      "Unlimited meetings",
+      "Screen sharing",
+      "Meeting links and codes",
+      "Arabic/English support",
+      "Enterprise-grade security"
+    ],
+    "ctaSignup": "Start free",
+    "ctaEnterprise": "Contact for enterprise",
+    "enterpriseNote": "For large organizations — contact us for future enterprise options."
+  },
+  "joinCode": {
+    "title": "Join with meeting code",
+    "subtitle": "Enter a meeting code to join without a full link",
+    "placeholder": "Enter meeting code",
+    "submit": "Join",
+    "invalidCode": "Invalid meeting code"
   },
   "signup": {
     "title": "Create account",
@@ -140,17 +123,23 @@
     "workEmail": "Work email",
     "password": "Password",
     "passwordHint": "At least 12 characters.",
-    "plan": "Select plan",
-    "plans": {
-      "FREE": "Free",
-      "TEAM": "Team",
-      "BUSINESS": "Business"
-    },
-    "businessNote": "Subscription will be activated after we contact you.",
+    "freeNote": "Q Meet is completely free for now — no payment required.",
     "submit": "Create account",
     "hasAccount": "Already have an account?",
     "loginLink": "Log in",
-    "errorGeneric": "Could not create account. Check your details and try again."
+    "errorGeneric": "Could not create account. Check your details and try again.",
+    "errors": {
+      "DATABASE_NOT_CONFIGURED": "Signup requires a configured database. Please set DATABASE_URL.",
+      "DATABASE_UNAVAILABLE": "Could not connect to the database.",
+      "EMAIL_ALREADY_EXISTS": "This email is already registered.",
+      "PASSWORD_TOO_SHORT": "Password must be at least 12 characters.",
+      "COMPANY_NAME_REQUIRED": "Company name is required.",
+      "INVALID_EMAIL": "Please enter a valid email address.",
+      "INVALID_INPUT": "Please check the information you entered.",
+      "RATE_LIMITED": "Too many attempts. Please try again later.",
+      "SERVICE_NOT_CONFIGURED": "The service is not fully configured. Contact your administrator.",
+      "UNEXPECTED_ERROR": "An unexpected error occurred. Please try again later."
+    }
   },
   "login": {
     "title": "Log in",
@@ -171,19 +160,21 @@
     "phone": "Phone (optional)",
     "companySize": "Company size",
     "selectSize": "Select size",
-    "planInterest": "Plan interest",
-    "selectPlan": "Select plan",
-    "planTeam": "Team",
-    "planBusiness": "Business",
+    "inquiryType": "How can we help?",
+    "selectInquiry": "Select topic (optional)",
+    "inquiryGeneral": "General inquiry",
+    "inquiryEnterprise": "Enterprise / custom setup",
+    "inquirySupport": "Technical support",
     "message": "Message",
+    "emailFallback": "You can also reach us directly at the email below.",
     "submit": "Submit",
     "error": "Could not submit your request. Please try again.",
     "successTitle": "Request received",
     "successHint": "Our team will contact you shortly."
   },
   "plans": {
-    "title": "Plans & pricing",
-    "subtitle": "Flexible plans for individuals, teams, and companies."
+    "title": "Free access",
+    "subtitle": "Q Meet is completely free for now — use it for video meetings at no cost during this stage."
   },
   "securityPage": {
     "title": "Security & trust",
@@ -229,9 +220,16 @@
     "startMeeting": "Start a new meeting",
     "roomTitlePlaceholder": "Meeting title",
     "startNow": "Start meeting",
-    "currentPlan": "Current plan",
-    "pendingActivation": "Subscription will be activated after we contact you.",
-    "viewPlans": "View plans",
+    "freeBannerTitle": "Completely free",
+    "freeBannerHint": "Use Q Meet for video meetings without a paid subscription during this stage.",
+    "meetingCreated": "Meeting created",
+    "meetingLink": "Meeting link",
+    "meetingCode": "Meeting code",
+    "copyLink": "Copy link",
+    "copyCode": "Copy code",
+    "copied": "Copied",
+    "startMeetingBtn": "Start meeting",
+    "close": "Close",
     "myRooms": "My rooms",
     "noRooms": "No rooms yet — create your first meeting.",
     "join": "Join",
@@ -291,6 +289,10 @@
     "unmuteMic": "Unmute microphone",
     "cameraOnAction": "Turn camera on",
     "cameraOffAction": "Turn camera off",
+    "cameraOptions": "Camera options",
+    "switchCamera": "Switch camera",
+    "mirrorCamera": "Mirror front camera",
+    "switchCameraUnsupported": "Camera switching is not supported on this device",
     "shareScreen": "Share screen",
     "stopSharing": "Stop sharing",
     "leaveMeeting": "Leave meeting",
@@ -321,6 +323,14 @@
     "connectionFailedHint": "Check your internet connection and try again. If the problem persists, contact your administrator.",
     "retry": "Try again",
     "backHome": "Back to home",
-    "elapsed": "Meeting duration"
+    "elapsed": "Meeting duration",
+    "audioStatus": {
+      "connected": "Audio connected",
+      "unavailable": "Audio unavailable"
+    }
+  },
+  "landingSupport": {
+    "title": "Need help?",
+    "subtitle": "Reach our team for enterprise setup, support, or questions about Q Meet."
   }
 }

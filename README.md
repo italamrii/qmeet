@@ -67,6 +67,89 @@ Read `SECURITY.md` before deploying. Non-negotiables:
 - `ARCHITECTURE.md` — system diagram, meeting-session data flow, security model summary. Updated as the app grows.
 - `SECURITY.md` — every security decision and its rationale.
 
+## Deploying on Railway
+
+### Prerequisites
+
+- [Railway](https://railway.app) account
+- LiveKit Cloud or self-hosted LiveKit instance (`wss://` URL + API key/secret)
+- Public domain (Railway provides `*.up.railway.app` or your custom domain)
+
+### Railway configuration
+
+This repo includes `railway.toml` with:
+
+- Nixpacks builder
+- Start command: `npm run start`
+- Restart on failure (max 10 retries)
+
+`npm run build` runs `prisma generate && next build`. **Database migrations are not run automatically** during build — apply them manually (see below).
+
+### Deployment checklist
+
+1. Create a Railway project and link this repository.
+2. Add a **PostgreSQL** plugin; copy `DATABASE_URL` into service variables.
+3. Set environment variables (see below).
+4. Deploy the app.
+5. Open a **Railway shell** (or one-off command) and run:
+   ```bash
+   npx prisma migrate deploy
+   ```
+6. Verify:
+   - [ ] Signup works
+   - [ ] Login works
+   - [ ] Create room from dashboard
+   - [ ] Join by link
+   - [ ] Join by room code
+   - [ ] Audio / video / screen share between two browsers
+   - [ ] Contact form submission
+
+**Optional start command** (runs migrations on every deploy — use only if you accept deploy-time DB access):
+
+```bash
+npx prisma migrate deploy && npm run start
+```
+
+Tradeoff: failed migrations block startup; safer for small teams that forget manual migrate.
+
+### Required Railway environment variables
+
+```env
+APP_ENV=production
+NODE_ENV=production
+
+DATABASE_URL=                    # from Railway PostgreSQL
+
+AUTH_ACCESS_TOKEN_SECRET=        # long random string
+AUTH_REFRESH_TOKEN_SECRET=       # long random string
+INVITE_LINK_SECRET=              # long random string
+
+LIVEKIT_URL=wss://...
+LIVEKIT_API_KEY=
+LIVEKIT_API_SECRET=              # never expose to browser
+
+MEDIA_PROVIDER=livekit
+ENABLE_MOCK_MEDIA=false
+ENABLE_DEMO_USERS=false
+
+NEXT_PUBLIC_APP_URL=https://your-app.up.railway.app
+```
+
+Notes:
+
+- `DATABASE_URL` should come from the Railway PostgreSQL service.
+- `NEXT_PUBLIC_APP_URL` must match your public Railway (or custom) domain — used for invite links.
+- `LIVEKIT_API_SECRET` is server-only; never add it as a `NEXT_PUBLIC_` variable.
+- Copy `.env.example` locally; **never commit** `.env.local` or real secrets.
+- Auth uses custom JWT cookies (`AUTH_*_TOKEN_SECRET`), not NextAuth.
+
+### Local PostgreSQL (development)
+
+```bash
+docker compose -f docker-compose.dev.yml up -d
+npx prisma migrate dev
+```
+
 ## Project status
 
 Following the staged execution plan:

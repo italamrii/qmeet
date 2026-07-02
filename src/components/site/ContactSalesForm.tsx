@@ -6,6 +6,7 @@
 import { FormEvent, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, CheckCircle2 } from "lucide-react";
+import { ContactEmail } from "./ContactEmail";
 
 export function ContactSalesForm() {
   const t = useTranslations("contactSales");
@@ -18,7 +19,11 @@ export function ContactSalesForm() {
     setError(null);
     setLoading(true);
     const fd = new FormData(e.currentTarget);
-    const plan = String(fd.get("planInterest") || "");
+    const inquiry = String(fd.get("inquiryType") || "");
+    const message = String(fd.get("message") || "");
+    const combinedMessage = inquiry
+      ? `[${inquiry}] ${message}`.trim()
+      : message || undefined;
     try {
       const res = await fetch("/api/leads", {
         method: "POST",
@@ -29,8 +34,7 @@ export function ContactSalesForm() {
           email: String(fd.get("email")),
           phone: String(fd.get("phone") || "") || undefined,
           companySize: String(fd.get("companySize") || "") || undefined,
-          message: String(fd.get("message") || "") || undefined,
-          planInterest: plan || undefined,
+          message: combinedMessage,
         }),
       });
       if (!res.ok) {
@@ -51,6 +55,8 @@ export function ContactSalesForm() {
         <CheckCircle2 className="h-10 w-10 text-glow" aria-hidden />
         <p className="font-medium">{t("successTitle")}</p>
         <p className="text-sm text-muted-foreground">{t("successHint")}</p>
+        <p className="text-sm text-muted-foreground">{t("emailFallback")}</p>
+        <ContactEmail className="text-sm" />
       </div>
     );
   }
@@ -89,11 +95,12 @@ export function ContactSalesForm() {
           </select>
         </div>
         <div>
-          <label htmlFor="planInterest" className="text-sm font-medium">{t("planInterest")}</label>
-          <select id="planInterest" name="planInterest" className="mt-1 w-full rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-sm">
-            <option value="">{t("selectPlan")}</option>
-            <option value="TEAM">{t("planTeam")}</option>
-            <option value="BUSINESS">{t("planBusiness")}</option>
+          <label htmlFor="inquiryType" className="text-sm font-medium">{t("inquiryType")}</label>
+          <select id="inquiryType" name="inquiryType" className="mt-1 w-full rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-sm">
+            <option value="">{t("selectInquiry")}</option>
+            <option value="GENERAL">{t("inquiryGeneral")}</option>
+            <option value="ENTERPRISE">{t("inquiryEnterprise")}</option>
+            <option value="SUPPORT">{t("inquirySupport")}</option>
           </select>
         </div>
       </div>
@@ -106,6 +113,7 @@ export function ContactSalesForm() {
         {loading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
         {t("submit")}
       </button>
+      <ContactEmail className="text-center text-sm text-muted-foreground" />
     </form>
   );
 }

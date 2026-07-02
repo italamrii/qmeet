@@ -14,6 +14,7 @@ import { useTranslations } from "next-intl";
 import type { MediaParticipant } from "@/lib/media/types";
 import { cn } from "@/lib/utils";
 import { ParticipantAvatar } from "./ParticipantAvatar";
+import { LiveKitVideoRenderer } from "./LiveKitVideoRenderer";
 
 /**
  * A single participant tile.
@@ -45,17 +46,26 @@ export function ParticipantTile({
       )}
       aria-label={`${name}${isLocal ? ` (${t("you")})` : ""}`}
     >
-      {isCameraOn ? (
-        /* Mock "video" surface — replaced by a real <VideoTrack> in Step 5. */
-        <div className="absolute inset-0">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_50%_35%,hsl(var(--glow)/0.08),transparent)]" />
-          <div className="flex h-full items-center justify-center">
-            <ParticipantAvatar
-              id={participant.id}
-              name={name}
-              className={variant === "strip" ? "h-10 w-10 text-sm" : "h-20 w-20 text-2xl"}
-            />
-          </div>
+      {participant.cameraVideoTrack ? (
+        <LiveKitVideoRenderer
+          track={participant.cameraVideoTrack}
+          muted={isLocal}
+          mirror={participant.mirrorPreview}
+          className="absolute inset-0"
+        />
+      ) : isCameraOn ? (
+        /* Camera enabled but track not ready yet — show avatar until track publishes. */
+        <div
+          className={cn(
+            "absolute inset-0 flex items-center justify-center bg-background/40",
+            participant.mirrorPreview && "scale-x-[-1]"
+          )}
+        >
+          <ParticipantAvatar
+            id={participant.id}
+            name={name}
+            className={variant === "strip" ? "h-10 w-10 text-sm" : "h-20 w-20 text-2xl"}
+          />
         </div>
       ) : (
         /* Camera-off state: clearly dimmed surface + avatar + explicit label. */

@@ -37,7 +37,7 @@ export async function GET(): Promise<NextResponse> {
     },
     orderBy: { createdAt: "desc" },
     take: 10,
-    select: { id: true, livekitName: true, title: true, createdAt: true },
+    select: { id: true, livekitName: true, roomCode: true, title: true, createdAt: true },
   });
 
   const recentMeetings = await prisma.meeting.findMany({

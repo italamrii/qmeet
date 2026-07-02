@@ -154,6 +154,8 @@ model Room {
   id          String @id @default(cuid())
   /// LiveKit room name — unique, non-guessable (cuid-derived, not user input).
   livekitName String @unique
+  /// Short human-readable code for joining (e.g. Q-8472-1935).
+  roomCode    String @unique
   /// Display title shown in the UI (user input, Zod-validated).
   title       String
   createdBy   User   @relation("RoomCreator", fields: [createdById], references: [id])
