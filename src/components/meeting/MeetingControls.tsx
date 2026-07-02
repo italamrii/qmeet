@@ -35,12 +35,14 @@ export type PanelKind = "participants" | "chat" | null;
 /** Round control button with active/danger variants and required labeling. */
 function ControlButton({
   label,
+  title,
   onClick,
   pressed,
   variant = "default",
   children,
 }: {
   label: string;
+  title?: string;
   onClick: () => void;
   pressed?: boolean;
   variant?: "default" | "danger" | "active";
@@ -50,7 +52,7 @@ function ControlButton({
     <button
       type="button"
       aria-label={label}
-      title={label}
+      title={title ?? label}
       aria-pressed={pressed}
       onClick={onClick}
       className={cn(
@@ -95,6 +97,7 @@ export function MeetingControls({
   onToggleMirror,
   onUnlockAudio,
   onSetVideoQuality,
+  unreadChatCount = 0,
 }: {
   localParticipant: MediaParticipant;
   isHost: boolean;
@@ -113,6 +116,7 @@ export function MeetingControls({
   onToggleMirror: () => void;
   onUnlockAudio: () => void;
   onSetVideoQuality: (preset: VideoQualityPreset) => void;
+  unreadChatCount?: number;
 }) {
   const t = useTranslations("room");
   const { isMuted, isCameraOn, isScreenSharing } = localParticipant;
@@ -157,6 +161,11 @@ export function MeetingControls({
 
       <ControlButton
         label={isScreenSharing ? t("stopSharing") : t("shareScreen")}
+        title={
+          !localMedia.supportsScreenShare && !isScreenSharing
+            ? t("screenShareUnsupportedMobile")
+            : undefined
+        }
         pressed={isScreenSharing}
         variant={isScreenSharing ? "active" : "default"}
         onClick={onToggleShare}
@@ -199,14 +208,28 @@ export function MeetingControls({
         </span>
       </div>
 
-      <ControlButton
-        label={t("chat")}
-        pressed={openPanel === "chat"}
-        variant={openPanel === "chat" ? "active" : "default"}
-        onClick={() => onTogglePanel("chat")}
-      >
-        <MessageSquare className="h-5 w-5" />
-      </ControlButton>
+      <div className="relative">
+        <ControlButton
+          label={
+            unreadChatCount > 0
+              ? t("chatWithUnread", { count: unreadChatCount })
+              : t("chat")
+          }
+          pressed={openPanel === "chat"}
+          variant={openPanel === "chat" ? "active" : "default"}
+          onClick={() => onTogglePanel("chat")}
+        >
+          <MessageSquare className="h-5 w-5" />
+        </ControlButton>
+        {unreadChatCount > 0 && (
+          <span
+            aria-hidden
+            className="absolute -end-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border border-glow/40 bg-destructive px-1 text-[10px] font-bold text-white"
+          >
+            {unreadChatCount > 9 ? "9+" : unreadChatCount}
+          </span>
+        )}
+      </div>
 
       <span aria-hidden className="mx-1 hidden h-8 w-px bg-border/70 sm:block" />
 

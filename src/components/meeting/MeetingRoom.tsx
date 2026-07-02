@@ -12,7 +12,7 @@
  */
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Loader2, X } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -30,6 +30,9 @@ import { RemoteAudioTracks } from "./RemoteAudioTracks";
 import { AudioStatusBadge } from "./AudioStatusBadge";
 import { NetworkQualityBadge } from "./NetworkQualityBadge";
 import { VideoGrid } from "./VideoGrid";
+import { MeetingToast } from "./MeetingToast";
+import { playChatNotificationSound } from "@/lib/media/chat-sound";
+import type { MediaAlertKey } from "@/lib/media/types";
 
 /**
  * The meeting room shell.
@@ -68,10 +71,70 @@ export function MeetingRoom({
     initialCameraOn,
   });
   const [openPanel, setOpenPanel] = useState<PanelKind>(null);
+  const [unreadChat, setUnreadChat] = useState(0);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const seenMessageCount = useRef(0);
+  const lastAlertKey = useRef<MediaAlertKey | null>(null);
+
+  const dismissToast = useCallback(() => {
+    setToastMessage(null);
+    client?.clearMediaAlert();
+    lastAlertKey.current = null;
+  }, [client]);
 
   function togglePanel(panel: Exclude<PanelKind, null>) {
-    setOpenPanel((current) => (current === panel ? null : panel));
+    setOpenPanel((current) => {
+      const next = current === panel ? null : panel;
+      if (next === "chat") {
+        setUnreadChat(0);
+      }
+      return next;
+    });
   }
+
+  // Chat notifications when panel is closed
+  useEffect(() => {
+    if (!room) return;
+    const messages = room.messages;
+    const prev = seenMessageCount.current;
+    if (messages.length <= prev) {
+      seenMessageCount.current = messages.length;
+      return;
+    }
+    const newMessages = messages.slice(prev);
+    seenMessageCount.current = messages.length;
+
+    if (openPanel === "chat") return;
+
+    const incoming = newMessages.filter((m) => !m.isLocal);
+    if (incoming.length === 0) return;
+
+    setUnreadChat((c) => c + incoming.length);
+    const last = incoming[incoming.length - 1]!;
+    setToastMessage(t("newMessageFrom", { name: last.senderName }));
+    playChatNotificationSound();
+  }, [room, openPanel, t]);
+
+  // Media alerts (camera switch error, screen share unsupported)
+  useEffect(() => {
+    if (!room?.mediaAlert) {
+      lastAlertKey.current = null;
+      return;
+    }
+    if (room.mediaAlert === lastAlertKey.current) return;
+    lastAlertKey.current = room.mediaAlert;
+    const key =
+      room.mediaAlert === "camera_switch_failed"
+        ? "cameraSwitchFailed"
+        : "screenShareUnsupportedMobile";
+    setToastMessage(t(key));
+  }, [room?.mediaAlert, t]);
+
+  useEffect(() => {
+    if (!toastMessage || !room?.mediaAlert) return;
+    const timer = setTimeout(() => client?.clearMediaAlert(), 4600);
+    return () => clearTimeout(timer);
+  }, [toastMessage, room?.mediaAlert, client]);
 
   // --- Error state (LiveKit token/connect failure) --------------------------
   if (phase === "error") {
@@ -253,7 +316,9 @@ export function MeetingRoom({
 
       {/* ---- Controls ---- */}
       {localParticipant && (
-        <MeetingControls
+        <>
+          <MeetingToast message={toastMessage} onDismiss={dismissToast} />
+          <MeetingControls
           localParticipant={localParticipant}
           isHost={isHost}
           isRecording={room.isRecording}
@@ -271,7 +336,9 @@ export function MeetingRoom({
           onToggleMirror={() => client.setMirrorLocalCamera(!room.localMedia.mirrorCamera)}
           onUnlockAudio={() => client.unlockAudio()}
           onSetVideoQuality={(preset) => client.setVideoQuality(preset)}
+          unreadChatCount={unreadChat}
         />
+        </>
       )}
     </main>
   );

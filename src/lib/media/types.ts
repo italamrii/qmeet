@@ -27,6 +27,9 @@ export type VideoQualityPreset = "auto" | "high" | "medium" | "low";
 /** LiveKit-derived network quality for the local participant. */
 export type ConnectionQualityLevel = "excellent" | "good" | "poor";
 
+/** User-facing media alert keys (mapped to i18n in the meeting UI). */
+export type MediaAlertKey = "camera_switch_failed" | "screen_share_unsupported";
+
 /** Attach/detach hook for a provider video track (LiveKit in production). */
 export interface VideoTrackAttachment {
   /** Stable id (track sid) so React effects do not thrash on snapshot rebuilds. */
@@ -86,6 +89,8 @@ export interface LocalMediaState {
   cameraFacing: "user" | "environment" | "unknown";
   /** Local camera publish quality preference. */
   videoQuality: VideoQualityPreset;
+  /** Whether screen share capture is available in this browser. */
+  supportsScreenShare: boolean;
 }
 
 /** Immutable snapshot of the whole room state, replaced on every change. */
@@ -105,6 +110,8 @@ export interface RoomSnapshot {
   audioPlaybackReady: boolean;
   /** Local participant network quality (LiveKit); null until known. */
   connectionQuality: ConnectionQualityLevel | null;
+  /** Transient alert for toast display; cleared by the UI. */
+  mediaAlert: MediaAlertKey | null;
 }
 
 /** Options the UI provides when joining a room. */
@@ -147,6 +154,9 @@ export interface MediaRoomClient {
 
   /** Change local camera publish quality (re-applies if camera is on). */
   setVideoQuality(preset: VideoQualityPreset): void;
+
+  /** Clears a transient media alert after the UI shows it. */
+  clearMediaAlert(): void;
 
   // --- Host-only (UI-gated here; token-grant-enforced in Step 5) ---
   muteParticipant(participantId: string): void;

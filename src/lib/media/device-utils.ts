@@ -10,3 +10,9 @@ export function isMobileDevice(): boolean {
   if (typeof navigator === "undefined") return false;
   return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
+
+/** True when the browser exposes screen-capture (desktop + some mobile browsers). */
+export function supportsScreenShareCapture(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return typeof navigator.mediaDevices?.getDisplayMedia === "function";
+}

@@ -31,6 +31,7 @@ import type {
   ChatMessage,
   ConnectionQualityLevel,
   ConnectionState,
+  MediaAlertKey,
   MediaParticipant,
   MediaRole,
   MediaRoomClient,
@@ -45,7 +46,12 @@ import {
   toVideoAttachment,
   toAudioAttachment,
 } from "./livekit-tracks";
-import { isMobileDevice } from "./device-utils";
+import { isMobileDevice, supportsScreenShareCapture } from "./device-utils";
+import {
+  findDeviceIndex,
+  inferFacingFromLabel,
+  nextFacingMode,
+} from "./camera-switch";
 import {
   defaultMirrorForFacing,
   readMirrorPreference,
@@ -151,9 +157,11 @@ export class LiveKitMediaClient implements MediaRoomClient {
   private mirrorCamera = true;
   private supportsCameraSwitch = false;
   private videoDeviceIndex = 0;
+  private activeVideoDeviceId: string | undefined;
   private audioPlaybackReady = false;
   private videoQuality: VideoQualityPreset = resolveVideoQualityPreference();
   private connectionQuality: ConnectionQualityLevel | null = null;
+  private mediaAlert: MediaAlertKey | null = null;
 
   constructor(private readonly options: LiveKitClientOptions) {
     this.room = new Room(buildLiveKitRoomOptions());
@@ -171,9 +179,11 @@ export class LiveKitMediaClient implements MediaRoomClient {
         supportsCameraSwitch: isMobileDevice(),
         cameraFacing: "unknown",
         videoQuality: this.videoQuality,
+        supportsScreenShare: supportsScreenShareCapture(),
       },
       audioPlaybackReady: false,
       connectionQuality: null,
+      mediaAlert: null,
     };
   }
 
@@ -260,16 +270,51 @@ export class LiveKitMediaClient implements MediaRoomClient {
     void this.applyVideoQuality(preset);
   }
 
+  clearMediaAlert(): void {
+    if (!this.mediaAlert) return;
+    this.mediaAlert = null;
+    this.rebuild();
+  }
+
   private async enableCameraWithQuality(
-    facing: "user" | "environment" | "unknown"
+    facing: "user" | "environment" | "unknown",
+    deviceId?: string
   ): Promise<void> {
     const capture = getCameraCaptureOptions(this.videoQuality, facing);
+    if (deviceId) {
+      capture.deviceId = deviceId;
+    }
     const publish = getCameraPublishOptions(this.videoQuality);
     await this.room.localParticipant.setCameraEnabled(true, capture, publish).catch(() => undefined);
     if (facing !== "unknown") {
       this.cameraFacing = facing;
     }
-    lkDevLog("camera enabled", { quality: this.videoQuality, facing });
+    this.syncActiveVideoDeviceId();
+    lkDevLog("camera enabled", { quality: this.videoQuality, facing, deviceId });
+  }
+
+  /** Disables then re-enables camera — required for reliable facing/device switches. */
+  private async republishCamera(
+    facing: "user" | "environment" | "unknown",
+    deviceId?: string
+  ): Promise<void> {
+    await this.room.localParticipant.setCameraEnabled(false).catch(() => undefined);
+    await this.enableCameraWithQuality(facing, deviceId);
+  }
+
+  private syncActiveVideoDeviceId(): void {
+    const pub = this.room.localParticipant.getTrackPublication(Track.Source.Camera);
+    const track = pub?.track?.mediaStreamTrack;
+    const settings = track?.getSettings();
+    if (settings?.deviceId) {
+      this.activeVideoDeviceId = settings.deviceId;
+    }
+  }
+
+  private applyMirrorForFacing(): void {
+    if (readMirrorPreference() === null) {
+      this.mirrorCamera = defaultMirrorForFacing(this.cameraFacing);
+    }
   }
 
   private async applyVideoQuality(preset: VideoQualityPreset): Promise<void> {
@@ -278,8 +323,7 @@ export class LiveKitMediaClient implements MediaRoomClient {
     const cameraOn = this.room.localParticipant.isCameraEnabled;
     if (cameraOn) {
       const facing = this.cameraFacing === "unknown" ? "user" : this.cameraFacing;
-      await this.room.localParticipant.setCameraEnabled(false).catch(() => undefined);
-      await this.enableCameraWithQuality(facing);
+      await this.republishCamera(facing);
     }
     lkDevLog("video quality changed", { preset });
     this.rebuild();
@@ -290,32 +334,48 @@ export class LiveKitMediaClient implements MediaRoomClient {
 
     try {
       const devices = await Room.getLocalDevices("videoinput", true);
-      if (devices.length >= 2) {
-        this.videoDeviceIndex = (this.videoDeviceIndex + 1) % devices.length;
-        const device = devices[this.videoDeviceIndex];
-        if (device) {
-          await this.room.switchActiveDevice("videoinput", device.deviceId);
-          const label = device.label.toLowerCase();
-          if (label.includes("back") || label.includes("rear") || label.includes("environment")) {
-            this.cameraFacing = "environment";
-          } else if (label.includes("front") || label.includes("user")) {
-            this.cameraFacing = "user";
-          }
+      const cameraOn = this.room.localParticipant.isCameraEnabled;
+
+      if (isMobileDevice()) {
+        const nextFacing = nextFacingMode(this.cameraFacing);
+        if (cameraOn) {
+          await this.republishCamera(nextFacing);
+        } else {
+          this.cameraFacing = nextFacing;
         }
-      } else if (this.room.localParticipant.isCameraEnabled) {
-        const nextFacing = this.cameraFacing === "user" ? "environment" : "user";
-        await this.enableCameraWithQuality(nextFacing);
+        this.applyMirrorForFacing();
+      } else if (devices.length >= 2) {
+        const currentIdx = findDeviceIndex(devices, this.activeVideoDeviceId);
+        const nextIndex =
+          currentIdx >= 0 ? (currentIdx + 1) % devices.length : (this.videoDeviceIndex + 1) % devices.length;
+        this.videoDeviceIndex = nextIndex;
+        const device = devices[nextIndex];
+        if (!device) throw new Error("no device");
+        const facing = inferFacingFromLabel(device.label);
+        if (cameraOn) {
+          await this.republishCamera(facing, device.deviceId);
+        } else {
+          this.activeVideoDeviceId = device.deviceId;
+          this.cameraFacing = facing;
+        }
+        this.applyMirrorForFacing();
       } else {
-        this.cameraFacing = this.cameraFacing === "user" ? "environment" : "user";
+        const nextFacing = nextFacingMode(this.cameraFacing);
+        if (cameraOn) {
+          await this.republishCamera(nextFacing);
+        } else {
+          this.cameraFacing = nextFacing;
+        }
+        this.applyMirrorForFacing();
       }
 
-      if (readMirrorPreference() === null) {
-        this.mirrorCamera = defaultMirrorForFacing(this.cameraFacing);
-      }
+      this.mediaAlert = null;
       await this.refreshDeviceCapabilities();
       this.rebuild();
     } catch {
       lkDevLog("camera switch failed");
+      this.mediaAlert = "camera_switch_failed";
+      this.rebuild();
     }
   }
 
@@ -323,6 +383,7 @@ export class LiveKitMediaClient implements MediaRoomClient {
     try {
       const devices = await Room.getLocalDevices("videoinput", true);
       this.supportsCameraSwitch = devices.length > 1 || isMobileDevice();
+      this.syncActiveVideoDeviceId();
     } catch {
       this.supportsCameraSwitch = isMobileDevice();
     }
@@ -333,15 +394,25 @@ export class LiveKitMediaClient implements MediaRoomClient {
     if (enabled) {
       await this.room.localParticipant.setScreenShareEnabled(false).catch(() => undefined);
       lkDevLog("screen share stopped");
+      this.mediaAlert = null;
     } else {
-      await this.room.localParticipant
-        .setScreenShareEnabled(
-          true,
-          getScreenShareCaptureOptions(),
-          getScreenSharePublishOptions()
-        )
-        .catch(() => undefined);
-      lkDevLog("screen share published");
+      if (!supportsScreenShareCapture()) {
+        this.mediaAlert = "screen_share_unsupported";
+        this.rebuild();
+        return;
+      }
+      try {
+        await this.room.localParticipant
+          .setScreenShareEnabled(
+            true,
+            getScreenShareCaptureOptions(),
+            getScreenSharePublishOptions()
+          );
+        lkDevLog("screen share published");
+        this.mediaAlert = null;
+      } catch {
+        this.mediaAlert = "screen_share_unsupported";
+      }
     }
     this.rebuild();
   }
@@ -560,9 +631,11 @@ export class LiveKitMediaClient implements MediaRoomClient {
         supportsCameraSwitch: this.supportsCameraSwitch,
         cameraFacing: this.cameraFacing,
         videoQuality: this.videoQuality,
+        supportsScreenShare: supportsScreenShareCapture(),
       },
       audioPlaybackReady: this.audioPlaybackReady,
       connectionQuality: this.connectionQuality,
+      mediaAlert: this.mediaAlert,
     };
     this.listeners.forEach((listener) => listener());
   }

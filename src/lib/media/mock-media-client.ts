@@ -19,13 +19,15 @@ import type {
   RoomSnapshot,
   VideoQualityPreset,
 } from "./types";
-import { isMobileDevice } from "./device-utils";
+import type { MediaAlertKey } from "./types";
+import { isMobileDevice, supportsScreenShareCapture } from "./device-utils";
 import {
   defaultMirrorForFacing,
   readMirrorPreference,
   resolveMirrorPreference,
   writeMirrorPreference,
 } from "./mirror-preference";
+import { nextFacingMode } from "./camera-switch";
 
 /** Fixed timestamps keep the initial snapshot deterministic across SSR/hydration. */
 const SEED_TIME = "2026-07-02T17:00:00.000Z";
@@ -83,6 +85,7 @@ export class MockMediaClient implements MediaRoomClient {
   private cameraFacing: LocalMediaState["cameraFacing"] = "user";
   private mirrorCamera = resolveMirrorPreference("user");
   private videoQuality: VideoQualityPreset = "auto";
+  private mediaAlert: MediaAlertKey | null = null;
 
   constructor(private readonly options: JoinOptions) {
     const local: MediaParticipant = {
@@ -121,9 +124,11 @@ export class MockMediaClient implements MediaRoomClient {
         supportsCameraSwitch: isMobileDevice(),
         cameraFacing: this.cameraFacing,
         videoQuality: this.videoQuality,
+        supportsScreenShare: supportsScreenShareCapture(),
       },
       audioPlaybackReady: false,
       connectionQuality: null,
+      mediaAlert: null,
     };
   }
 
@@ -204,7 +209,7 @@ export class MockMediaClient implements MediaRoomClient {
 
   switchCamera(): void {
     if (!this.snapshot.localMedia.supportsCameraSwitch) return;
-    this.cameraFacing = this.cameraFacing === "user" ? "environment" : "user";
+    this.cameraFacing = nextFacingMode(this.cameraFacing);
     if (readMirrorPreference() === null) {
       this.mirrorCamera = defaultMirrorForFacing(this.cameraFacing);
     }
@@ -215,6 +220,7 @@ export class MockMediaClient implements MediaRoomClient {
         cameraFacing: this.cameraFacing,
         mirrorCamera: this.mirrorCamera,
       },
+      mediaAlert: null,
     });
   }
 
@@ -238,15 +244,25 @@ export class MockMediaClient implements MediaRoomClient {
     });
   }
 
+  clearMediaAlert(): void {
+    if (!this.mediaAlert) return;
+    this.mediaAlert = null;
+    this.patch({ mediaAlert: null });
+  }
+
   toggleScreenShare(): void {
     const local = this.find(LOCAL_ID);
     const turningOn = !local?.isScreenSharing;
+    if (turningOn && !supportsScreenShareCapture()) {
+      this.patch({ mediaAlert: "screen_share_unsupported" });
+      return;
+    }
     this.patch({
       participants: this.snapshot.participants.map((p) => ({
         ...p,
-        // Only one active share at a time (mirrors real SFU policy).
         isScreenSharing: p.id === LOCAL_ID ? turningOn : false,
       })),
+      mediaAlert: null,
     });
   }
 

@@ -19,14 +19,14 @@ import { LiveKitVideoRenderer } from "./LiveKitVideoRenderer";
 /**
  * A single participant tile.
  * @param participant - Participant state from the room snapshot.
- * @param variant - "grid" (default), "focus" (large stage tile), "strip" (thumbnail).
+ * @param variant - "grid" (default), "focus", "strip", "compact" (dense grid).
  */
 export function ParticipantTile({
   participant,
   variant = "grid",
 }: {
   participant: MediaParticipant;
-  variant?: "grid" | "focus" | "strip";
+  variant?: "grid" | "focus" | "strip" | "compact";
 }) {
   const t = useTranslations("room");
   const { name, role, isLocal, isMuted, isCameraOn, isSpeaking, isScreenSharing } = participant;
@@ -41,7 +41,9 @@ export function ParticipantTile({
       transition={{ type: "spring", stiffness: 260, damping: 26 }}
       className={cn(
         "relative overflow-hidden rounded-xl border border-border/60 bg-tile-sheen",
-        variant === "strip" ? "aspect-video w-36 shrink-0 sm:w-44" : "aspect-video w-full",
+        variant === "strip" && "aspect-video w-36 shrink-0 sm:w-44",
+        variant === "compact" && "aspect-video w-full min-h-0",
+        (variant === "grid" || variant === "focus") && "aspect-video w-full",
         isSpeaking && "animate-speaking-ring border-glow/50"
       )}
       aria-label={`${name}${isLocal ? ` (${t("you")})` : ""}`}
@@ -64,7 +66,13 @@ export function ParticipantTile({
           <ParticipantAvatar
             id={participant.id}
             name={name}
-            className={variant === "strip" ? "h-10 w-10 text-sm" : "h-20 w-20 text-2xl"}
+            className={
+              variant === "strip"
+                ? "h-10 w-10 text-sm"
+                : variant === "compact"
+                  ? "h-12 w-12 text-base"
+                  : "h-20 w-20 text-2xl"
+            }
           />
         </div>
       ) : (
@@ -73,7 +81,7 @@ export function ParticipantTile({
           <ParticipantAvatar
             id={participant.id}
             name={name}
-            className={variant === "strip" ? "h-10 w-10 text-sm" : "h-16 w-16 text-xl"}
+            className={variant === "strip" ? "h-10 w-10 text-sm" : variant === "compact" ? "h-14 w-14 text-lg" : "h-16 w-16 text-xl"}
           />
           {variant !== "strip" && (
             <span className="flex items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-1 text-[11px] font-medium text-white/70 backdrop-blur-sm">
@@ -94,7 +102,7 @@ export function ParticipantTile({
           <span
             className={cn(
               "truncate font-semibold text-white",
-              variant === "strip" ? "text-[11px]" : "text-xs"
+              variant === "strip" ? "text-[11px]" : variant === "compact" ? "text-[10px]" : "text-xs"
             )}
           >
             {name}
