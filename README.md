@@ -85,17 +85,89 @@ This repo includes `railway.toml` with:
 
 `npm run build` runs `prisma generate && next build`. **Database migrations are not run automatically** during build — apply them manually (see below).
 
-### Deployment checklist
+`railway.toml` does **not** strip or override environment variables. The app reads `process.env.DATABASE_URL` at **runtime** on the Node server — not from `.env` files committed to git.
 
-1. Create a Railway project and link this repository.
-2. Add a **PostgreSQL** plugin; copy `DATABASE_URL` into service variables.
-3. Set environment variables (see below).
-4. Deploy the app.
-5. Open a **Railway shell** (or one-off command) and run:
+### Step-by-step: PostgreSQL + `DATABASE_URL` on the app service
+
+Signup returns `DATABASE_NOT_CONFIGURED` when `process.env.DATABASE_URL` is empty at runtime. This is almost always a **Railway variable placement** issue, not an app bug.
+
+1. **Add PostgreSQL** to the same Railway project (e.g. service name `Postgres`).
+2. Open the **`qmeet` app service** (not the Postgres service) → **Variables**.
+3. Add `DATABASE_URL` using **one** of these methods:
+
+   **Option A — Reference (recommended):**
+
+   ```
+   DATABASE_URL=${{Postgres.DATABASE_URL}}
+   ```
+
+   Replace `Postgres` with your PostgreSQL service’s exact name in Railway.
+
+   **Option B — Copy internal URL manually:**
+
+   From the Postgres service → **Connect** → copy the **internal** URL (host ends with `postgres.railway.internal`), e.g.:
+
+   ```
+   postgresql://postgres:PASSWORD@postgres.railway.internal:5432/railway
+   ```
+
+   Paste it as `DATABASE_URL` on the **`qmeet` service**.
+
+   > Do **not** put `DATABASE_URL` only on the Postgres service. The Next.js app runs on `qmeet` and only sees variables on **that** service (plus shared project variables).
+
+4. Add the rest of the required variables on **`qmeet`** (see list below).
+5. **Redeploy `qmeet`** after changing variables (Deploy → Redeploy, or push a commit).
+6. Open a **new** Railway Console on the **`qmeet`** service (after redeploy finishes).
+7. Verify runtime injection:
+
+   ```bash
+   printenv DATABASE_URL
+   ```
+
+   You should see a non-empty `postgresql://...` string. If empty, the variable is still not on `qmeet` — recheck step 2–5.
+
+8. Run migrations from the **`qmeet`** console:
+
    ```bash
    npx prisma migrate deploy
    ```
-6. Verify:
+
+9. Verify env health over HTTP (booleans only, no secrets):
+
+   ```bash
+   curl https://qmeet.up.railway.app/api/health/env
+   ```
+
+   Expect `"databaseConfigured": true` when `DATABASE_URL` is set correctly.
+
+### Troubleshooting `DATABASE_NOT_CONFIGURED`
+
+| Symptom | Likely cause |
+|--------|----------------|
+| `printenv DATABASE_URL` empty in `qmeet` console | `DATABASE_URL` not set on **app** service, or redeploy not run |
+| Variable visible in UI but empty in shell | Wrong service selected in Console; open shell on **`qmeet`** |
+| Reference `${{...}}` not resolving | Postgres service name mismatch; use exact name from Railway |
+| Works locally, fails on Railway | Local `.env.local` is not deployed; set vars in Railway UI |
+| `databaseConfigured: false` in `/api/health/env` | Same as above — runtime `process.env.DATABASE_URL` is unset |
+
+Startup logs also print safe booleans once per process:
+
+```
+[env:startup] { appEnv, nodeEnv, databaseConfigured, livekitConfigured, ... }
+```
+
+Check **Deploy Logs** for `[env:startup]` after each deploy.
+
+### Deployment checklist
+
+1. Create a Railway project and link this repository.
+2. Add **PostgreSQL**; wire `DATABASE_URL` to **`qmeet`** (reference or copy).
+3. Set all required environment variables on **`qmeet`**.
+4. **Redeploy `qmeet`**.
+5. Confirm `printenv DATABASE_URL` in **`qmeet`** console.
+6. Run `npx prisma migrate deploy` in **`qmeet`** console.
+7. Hit `GET /api/health/env` — all booleans should be `true` for full production readiness.
+8. Verify:
    - [ ] Signup works
    - [ ] Login works
    - [ ] Create room from dashboard
@@ -112,36 +184,39 @@ npx prisma migrate deploy && npm run start
 
 Tradeoff: failed migrations block startup; safer for small teams that forget manual migrate.
 
-### Required Railway environment variables
+### Required Railway environment variables (on `qmeet` service)
 
 ```env
 APP_ENV=production
 NODE_ENV=production
 
-DATABASE_URL=                    # from Railway PostgreSQL
+DATABASE_URL=<Railway Postgres internal URL or ${{Postgres.DATABASE_URL}}>
 
-AUTH_ACCESS_TOKEN_SECRET=        # long random string
-AUTH_REFRESH_TOKEN_SECRET=       # long random string
-INVITE_LINK_SECRET=              # long random string
+AUTH_ACCESS_TOKEN_SECRET=<strong secret>
+AUTH_REFRESH_TOKEN_SECRET=<strong secret>
+INVITE_LINK_SECRET=<strong secret>
 
-LIVEKIT_URL=wss://...
-LIVEKIT_API_KEY=
-LIVEKIT_API_SECRET=              # never expose to browser
+LIVEKIT_URL=<wss://...>
+LIVEKIT_API_KEY=<key>
+LIVEKIT_API_SECRET=<secret>
 
 MEDIA_PROVIDER=livekit
 ENABLE_MOCK_MEDIA=false
 ENABLE_DEMO_USERS=false
 
-NEXT_PUBLIC_APP_URL=https://your-app.up.railway.app
+NEXT_PUBLIC_APP_URL=https://qmeet.up.railway.app
 ```
 
 Notes:
 
-- `DATABASE_URL` should come from the Railway PostgreSQL service.
+- Variable name must be exactly **`DATABASE_URL`** (Prisma and signup both use this name).
+- Use the **internal** Postgres URL for app runtime (`*.railway.internal`), not a public proxy URL, unless Railway docs for your setup say otherwise.
 - `NEXT_PUBLIC_APP_URL` must match your public Railway (or custom) domain — used for invite links.
 - `LIVEKIT_API_SECRET` is server-only; never add it as a `NEXT_PUBLIC_` variable.
+- `NEXT_PUBLIC_MEDIA_PROVIDER` is optional; the server uses `MEDIA_PROVIDER`.
 - Copy `.env.example` locally; **never commit** `.env.local` or real secrets.
 - Auth uses custom JWT cookies (`AUTH_*_TOKEN_SECRET`), not NextAuth.
+- After **any** variable change on Railway, **redeploy** the `qmeet` service before testing.
 
 ### Local PostgreSQL (development)
 
