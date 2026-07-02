@@ -1,0 +1,255 @@
+// =============================================================================
+// prisma/schema.prisma
+// -----------------------------------------------------------------------------
+// Purpose: Data model for QIMAM Meet — users, rooms, meetings, recordings,
+//   per-meeting participant roles, and the append-only audit trail.
+// Depends on: PostgreSQL (DATABASE_URL), Prisma Client.
+// Security notes:
+//   - All access goes through Prisma parameterized queries; raw SQL is banned.
+//   - PII inventory: User.email + User.name only (see SECURITY.md §Database).
+//   - Recording rows store S3 object KEYS, never URLs — playback is authorized
+//     per-request through the API.
+//   - RefreshToken enables rotation reuse-detection with FAMILY-scoped
+//     revocation (see SECURITY.md §Application tokens).
+//   - Approved (with additions) — migration generated from this version.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Platform-wide role. Determines what a user may do globally
+/// (room creation is HOST/ADMIN only). Per-meeting authority is captured
+/// separately in MeetingParticipant.role so a global HOST can still be a
+/// plain participant in someone else's meeting.
+enum Role {
+  ADMIN
+  HOST
+  PARTICIPANT
+  OBSERVER
+}
+
+/// Role a person holds inside one specific meeting. Drives the LiveKit
+/// grant set minted for that session (least privilege — see SECURITY.md).
+enum ParticipantRole {
+  HOST
+  PARTICIPANT
+  OBSERVER
+}
+
+/// Lifecycle of a recording as reported by LiveKit Egress.
+enum RecordingStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  FAILED
+}
+
+/// Audit event types — append-only trail (see SECURITY.md §Audit logging).
+enum AuditEventType {
+  USER_LOGIN
+  USER_SIGNUP
+  ROOM_CREATED
+  ROOM_JOINED
+  ROOM_LEFT
+  RECORDING_STARTED
+  RECORDING_STOPPED
+  RECORDING_ACCESSED
+}
+
+/// Registered platform user.
+/// PII: email + name only; passwordHash is argon2id (never bcrypt/plaintext).
+model User {
+  id           String @id @default(cuid())
+  email        String @unique
+  name         String
+  /// argon2id hash — never store or log the plaintext password.
+  passwordHash String
+  role         Role   @default(PARTICIPANT)
+
+  /// Emergency kill-switch: incrementing invalidates ALL of this user's
+  /// sessions at once (admin action / confirmed account compromise).
+  /// Routine reuse-detection is FAMILY-scoped via RefreshToken.familyId.
+  tokenVersion Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  roomsCreated   Room[]               @relation("RoomCreator")
+  participations MeetingParticipant[]
+  auditEvents    AuditLog[]
+  refreshTokens  RefreshToken[]
+
+  @@index([role])
+}
+
+/// One issued refresh token (rotation model: every use mints a successor and
+/// marks this row `used`). All tokens descended from a single login share a
+/// `familyId`. If a token with used=true is presented again (replay), the
+/// WHOLE FAMILY is revoked — but other sessions/devices of the same user
+/// survive (family-scoped, not user-global — see SECURITY.md).
+model RefreshToken {
+  /// The token's jti claim (crypto-random UUID, generated server-side).
+  id     String @id
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  /// Rotation family — constant across all successors of one login.
+  familyId String
+  /// Set to true when the token is rotated. A used token presented again
+  /// means replay/theft → revoke the family.
+  used     Boolean @default(false)
+
+  expiresAt DateTime
+  /// Set when the family is revoked (reuse detection, logout, admin action).
+  revokedAt DateTime?
+
+  /// SHA-256 hash of the client user-agent string — never the raw value
+  /// (data minimization; enough to correlate a family to a device class).
+  deviceInfo String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([expiresAt])
+}
+
+/// A persistent room — the addressable media space (maps 1:1 to a LiveKit room).
+/// Business meaning (agenda, participants, history) lives in Meeting, keeping
+/// the media layer decoupled for future CityMind broadcast reuse.
+model Room {
+  id          String @id @default(cuid())
+  /// LiveKit room name — unique, non-guessable (cuid-derived, not user input).
+  livekitName String @unique
+  /// Display title shown in the UI (user input, Zod-validated).
+  title       String
+  createdBy   User   @relation("RoomCreator", fields: [createdById], references: [id])
+  createdById String
+
+  /// Invite links are signed+time-limited (HMAC, INVITE_LINK_SECRET) and are
+  /// NOT stored here — only verified. This flag lets a host kill all links.
+  invitesRevoked Boolean @default(false)
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  meetings Meeting[]
+
+  @@index([createdById])
+  @@index([isActive])
+}
+
+/// One session held in a Room (a Room can host many meetings over time).
+model Meeting {
+  id     String @id @default(cuid())
+  room   Room   @relation(fields: [roomId], references: [id])
+  roomId String
+
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants MeetingParticipant[]
+  recordings   Recording[]
+
+  @@index([roomId, startedAt])
+}
+
+/// Join table: who took part in a meeting, with what in-meeting role,
+/// and when they joined/left (feeds the dashboard + audit views).
+model MeetingParticipant {
+  id               String          @id @default(cuid())
+  meeting          Meeting         @relation(fields: [meetingId], references: [id])
+  meetingId        String
+  /// Null for guest joiners via invite link (identified by guestDisplayName).
+  user             User?           @relation(fields: [userId], references: [id])
+  userId           String?
+  /// Guest-supplied display name (Zod-validated). Null for registered users —
+  /// they display User.name. Exactly one of userId / guestDisplayName is set.
+  guestDisplayName String?
+  role             ParticipantRole @default(PARTICIPANT)
+
+  /// jti of the signed invite link used to join (invite links are stateless
+  /// HMAC tokens, not DB rows — storing the jti gives audit linkage and
+  /// enables per-link revocation lists later). Null for direct member joins.
+  inviteTokenId String?
+
+  /// SHA-256 hash of a coarse device fingerprint (UA + accept-language).
+  /// Never a raw IP address (data minimization). Null when unavailable.
+  deviceFingerprintHash String?
+
+  joinedAt DateTime  @default(now())
+  leftAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([meetingId, userId])
+  @@index([userId])
+}
+
+/// Reference to an Egress recording. Stores the S3 object key ONLY —
+/// the bucket is SSE-encrypted and playback requires a per-request
+/// authorization check (see SECURITY.md §Recordings).
+model Recording {
+  id        String  @id @default(cuid())
+  meeting   Meeting @relation(fields: [meetingId], references: [id])
+  meetingId String
+
+  /// LiveKit Egress ID, used to poll/stop the egress job.
+  egressId  String          @unique
+  /// S3/MinIO object key (NOT a URL). Encrypted at rest via bucket SSE.
+  objectKey String?
+  status    RecordingStatus @default(PENDING)
+
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+  /// Duration in seconds, filled on completion.
+  durationS Int?
+
+  /// Retention: when this passes, the recording is eligible for scheduled
+  /// deletion — unless legalHold is set. Null = retain indefinitely
+  /// (see ARCHITECTURE.md §Retention & legal hold).
+  retentionExpiresAt DateTime?
+  /// Legal hold overrides retention expiry AND manual deletion requests.
+  legalHold          Boolean   @default(false)
+  /// Soft delete: rows are never hard-deleted; the S3 object is removed and
+  /// this timestamp set. Preserves the audit/metadata trail for compliance.
+  deletedAt          DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([meetingId])
+  @@index([status])
+  @@index([retentionExpiresAt])
+}
+
+/// Append-only audit trail. Rows are never updated or deleted by the app.
+/// Deliberately minimal: event + actor + target + timestamp. No payloads,
+/// no message content, no media metadata (data-minimization principle).
+model AuditLog {
+  id        String         @id @default(cuid())
+  eventType AuditEventType
+  /// Actor — null for system-originated events (e.g. egress webhook updates).
+  actor     User?          @relation(fields: [actorId], references: [id])
+  actorId   String?
+  /// Target entity ID (roomId / meetingId / recordingId) — free-form by design.
+  targetId  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([eventType, createdAt])
+  @@index([actorId])
+  @@index([targetId])
+}
